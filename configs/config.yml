@@ -1,0 +1,27 @@
+postgres:
+  # Data Source Name - строка подключения к БД
+  dsn: "${POSTGRES_DSN:-postgres://app:secret@localhost:5432/demo}"
+
+  # имя слота логической репликации
+  # если слот не существует - сервис попытается создать его при старте
+  replication_slot: "${PG_SLOT:-redis_invalidator}"
+
+  # плагин декодирования сообщений WAL, важно для формата сообщений
+  plugin: "pgoutput"
+
+redis:
+  addr: "{REDIS_ADDR:-localhost:6379}"
+  password: "${REDIS_PASSWORD:-}"
+
+  # номер логической базы данных в Redis
+  db: 0
+
+mapping:
+  - table: "users" # имя таблицы postgres, чьи поля нужно отслеживать
+    # таблица должна иметь PK или иметь UNIQUE NOT NULL поле с настроенным REPLICA IDENTITY USING INDEX
+    # для однозначной идентификации записи
+
+    # шаблон ключа в redis, который будет удаляться при изменении строки в postgres
+    # в фигурных скобках указано имя поля в postgres (обычно PK), значение которого будет подставляться
+    # ! ключи в redis плоские, удаление "user:123" НЕ удалит "user:123:email"
+    key_pattern: "user:{id}"

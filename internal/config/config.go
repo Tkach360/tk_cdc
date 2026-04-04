@@ -4,8 +4,10 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -53,7 +55,31 @@ func Load(path string) (*Config, error) {
 	return &cfg, nil
 }
 
-func (c Config) validate() error {
-	// TODO: сделать метод Config.validate
+func (c *Config) validate() error {
+
+	// TODO: улучшить работу с ошибками для тестов
+	if c.Postgres.DSN == "" {
+		return errors.New("postgres.dsn is required")
+	}
+	if c.Postgres.ReplicationSlot == "" {
+		return errors.New("postgres.replication_slot is required")
+	}
+	if c.Postgres.Plugin != "pgoutput" {
+		return errors.New("only 'pgoutput' plugin is supported")
+	}
+	if c.Redis.Addr == "" {
+		return errors.New("redis.addr is required")
+	}
+	for i, rule := range c.Mapping {
+		if rule.Table == "" {
+			return fmt.Errorf("mapping[%d]: table is required", i)
+		}
+		if rule.KeyPattern == "" {
+			return fmt.Errorf("mapping[%d]: key_pattern is required", i)
+		}
+		if !strings.Contains(rule.KeyPattern, "{") {
+			return fmt.Errorf("mapping[%d]: key_pattern must contain {field} placeholder", i)
+		}
+	}
 	return nil
 }

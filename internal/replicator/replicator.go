@@ -151,6 +151,8 @@ func (r *Replicator) Run(ctx context.Context) error {
 					// TODO: нужно что-то делать в случае ошибки обработки сообщения
 				}
 
+				// если сообщение обраотано и транзакция закоммичена
+				// то отправляем в postgres уведомление с новым LSN о том что мы обработали
 				if _, ok := logicalMsg.(*pglogrepl.CommitMessage); proceeded && ok {
 					confirmLSN := xld.WALStart + pglogrepl.LSN(len(xld.WALData))
 					if err := r.sendStandbyStatusUpdate(ctx, conn, confirmLSN); err != nil {

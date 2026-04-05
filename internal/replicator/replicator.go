@@ -204,8 +204,29 @@ func (r *Replicator) ensureReplicationSlot(ctx context.Context, conn *pgx.Conn) 
 
 // получить позицию LSN с которой следует продолжить чтение
 func (r *Replicator) getRestartLSN(ctx context.Context, conn *pgx.Conn) (pglogrepl.LSN, error) {
-	// TODO: сделать метод *Replicator.getRestartLSN
-	return 0, nil
+
+	// TODO: по-хорошему нужно читать LSN откуда-то, а не использовать начало слота
+	var lsnStr string
+	err := conn.QueryRow(
+		ctx,
+		"SELECT confirmed_flush_lsn FROM pg_replication_slots WHERE slot_name = $1",
+		r.slotName,
+	).Scan(&lsnStr)
+
+	if err == pgx.ErrNoRows {
+		// новый слот
+		return 0, nil
+	}
+	if err != nil {
+		return 0, fmt.Errorf("query slot lsn: %w", err)
+	}
+
+	lsn, err := pglogrepl.ParseLSN(lsnStr)
+	if err != nil {
+		return 0, fmt.Errorf("parse lsn '%s': %w", lsnStr, err)
+	}
+
+	return lsn, nil
 }
 
 // обработка логического сообщения

@@ -4,6 +4,7 @@
 package mapper
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/Tkach360/tk_cdc/internal/config"
@@ -58,7 +59,66 @@ func (m *Mapper) CacheRelation(msg *pglogrepl.RelationMessage) {
 }
 
 // получить все измененные ключи, связанные с данным отображением
-func (s *Mapper) GetKeys(relID uint32, tuple *pglogrepl.TupleData) []string {
-	// TODO: сделать метод *Mapper.GetKeys
-	return []string{}
+func (m *Mapper) GetKeys(relID uint32, tuple *pglogrepl.TupleData) []string {
+
+	// проверяем отслеживаем ли мы данную таблицу
+	relMsg, ok := m.relData[relID]
+	if !ok {
+		return nil
+	}
+
+	relName := normalizeRelationName(relMsg.RelationName)
+	rule := m.rules[relName]
+
+	// TODO: явно нужно парсить KeyPattern в какую-то структуру и тут уже использовать всё готовое
+	colName, _ := extractColumnName(rule.KeyPattern)
+
+	// TODO: индекс поля и тип следует сразу где-то считать, а не вычислять каждый раз
+	var colIdx int
+	var colType uint32
+	for i, col := range relMsg.Columns {
+		if col.Name == colName {
+			colIdx = i
+			colType = col.DataType
+		}
+	}
+
+	// TODO: нужно обрабатывать ошибку, если например в поле NULL
+	inkey, _ := TupleDataToString(tuple.Columns[colIdx], colType)
+
+	// TODO: это тоже явно нужно переделать
+	key := strings.ReplaceAll(rule.KeyPattern, "{"+colName+"}", inkey)
+
+	// TODO: пока что возвращаю 1 ключ, в дальнейшем нужно будет реализовать составной ключ
+	return []string{key}
+}
+
+// привести значение из поля в строку
+func TupleDataToString(data *pglogrepl.TupleDataColumn, typ uint32) (string, error) {
+	// TODO: сделать функцию TupleDataToString
+	return string(data.Data), nil
+}
+
+// получить имя ключа, который указан в keyPattern в фигурных скобках
+// для user{id} вернет id
+func extractColumnName(keyPattern string) (string, error) {
+	start := strings.Index(keyPattern, "{")
+	end := strings.Index(keyPattern, "}")
+
+	if start == -1 {
+		return "", fmt.Errorf("missing opening brace '{'")
+	}
+	if end == -1 {
+		return "", fmt.Errorf("missing closing brace '}'")
+	}
+	if end <= start {
+		return "", fmt.Errorf("closing brace appears before opening brace")
+	}
+
+	columnName := keyPattern[start+1 : end]
+	if columnName == "" {
+		return "", fmt.Errorf("empty column name between braces")
+	}
+
+	return columnName, nil
 }

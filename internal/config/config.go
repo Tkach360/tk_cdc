@@ -77,6 +77,7 @@ func (c *Config) validate() error {
 		if rule.KeyPattern == "" {
 			return fmt.Errorf("mapping[%d]: key_pattern is required", i)
 		}
+		// TODO: нужно сделать более доскональную проверку формата поля и парсить в какую-нибудь структуру
 		if !strings.Contains(rule.KeyPattern, "{") {
 			return fmt.Errorf("mapping[%d]: key_pattern must contain {field} placeholder", i)
 		}

@@ -26,13 +26,7 @@ func New(rules []config.MappingRule) *Mapper {
 
 	mrules := make(map[string]config.MappingRule)
 	for _, rule := range rules {
-		key := rule.Table
-
-		// нормализуем, чтобы обязательно была схема, если схема не указана, то схема public
-		// TODO: не забыть добавить в документацию, что нужно указывать схему иначе схема public
-		if !strings.Contains(rule.Table, ".") {
-			key = "public." + rule.Table
-		}
+		key := normalizeRelationName(rule.Table)
 		mrules[key] = rule
 	}
 
@@ -42,9 +36,25 @@ func New(rules []config.MappingRule) *Mapper {
 	}
 }
 
+// нормализация имени отношения - добавление имени схемы перед именем таблицы если его нет
+// вернет имя_схемы.имя_таблицы, если схемы нет, то схема public
+func normalizeRelationName(name string) string {
+	if !strings.Contains(name, ".") {
+		// TODO: не забыть добавить в документацию, что нужно указывать схему иначе схема public
+		// TODO: может сделать указание схемы по-умолчанию в конфиге?
+		name = "public." + name
+	}
+	return name
+}
+
 // закешировать данные об отображении (таблице)
 func (m *Mapper) CacheRelation(msg *pglogrepl.RelationMessage) {
-	m.relData[msg.RelationID] = msg
+
+	// добавляем данные об отслеживаемом отображении только если есть соответствующее правило
+	relName := normalizeRelationName(msg.RelationName)
+	if _, ok := m.rules[relName]; ok {
+		m.relData[msg.RelationID] = msg
+	}
 }
 
 // получить все измененные ключи, связанные с данным отображением

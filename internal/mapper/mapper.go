@@ -44,7 +44,7 @@ func New(rules []config.MappingRule) *Mapper {
 
 // закешировать данные об отображении (таблице)
 func (m *Mapper) CacheRelation(msg *pglogrepl.RelationMessage) {
-	// TODO: сделать метод *Mapper.CacheRelation
+	m.relData[msg.RelationID] = msg
 }
 
 // получить все измененные ключи, связанные с данным отображением

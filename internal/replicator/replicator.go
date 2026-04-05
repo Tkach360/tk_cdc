@@ -237,7 +237,22 @@ func (r *Replicator) processLogicalMessage(ctx context.Context, lmsg pglogrepl.M
 }
 
 // отправить статус ожидания
-func (r *Replicator) sendStandbyStatusUpdate(ctx context.Context, conn *pgx.Conn, cLSN pglogrepl.LSN) error {
-	// TODO: сделать метод *Replicator.sendStandbyStatusUpdate
+func (r *Replicator) sendStandbyStatusUpdate(ctx context.Context, conn *pgx.Conn, lsn pglogrepl.LSN) error {
+
+	// отправляем статус обработки WAL в postgres, чтобы он смог очистить ненужные записи WAL
+	err := pglogrepl.SendStandbyStatusUpdate(
+		ctx,
+		conn.PgConn(),
+		pglogrepl.StandbyStatusUpdate{
+			WALWritePosition: lsn,
+			WALFlushPosition: lsn,
+			WALApplyPosition: lsn,
+			ClientTime:       time.Now(),
+			ReplyRequested:   false,
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("send standby status: %w", err)
+	}
 	return nil
 }

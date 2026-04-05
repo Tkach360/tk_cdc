@@ -230,9 +230,51 @@ func (r *Replicator) getRestartLSN(ctx context.Context, conn *pgx.Conn) (pglogre
 }
 
 // обработка логического сообщения
-// возвращает признак обработки и ошибку
-func (r *Replicator) processLogicalMessage(ctx context.Context, lmsg pglogrepl.Message) (bool, error) {
-	// TODO: сделать метод *Replicator.processLogicalMessage
+// возвращает признак обработки сообщения и ошибку
+func (r *Replicator) processLogicalMessage(ctx context.Context, msg pglogrepl.Message) (bool, error) {
+	switch msg := msg.(type) {
+	case *pglogrepl.BeginMessage:
+		slog.Debug("begin transaction", "lsn", msg.FinalLSN, "xid", msg.Xid)
+		return false, nil
+
+	case *pglogrepl.CommitMessage:
+		slog.Debug("commit transaction", "commit_lsn", msg.CommitLSN, "end_lsn", msg.TransactionEndLSN)
+		// TODO: вот тут нужно собственно обновлять данные в redis, так как только в сейчас стало ясно что данные зафиксированы
+		// TODO: если транзакция не закоммичена то нужно откатывать изменения
+		return true, nil
+
+	case *pglogrepl.RelationMessage:
+		slog.Debug("relation metadata", "name", msg.Namespace+"."+msg.RelationName, "oid", msg.RelationID)
+
+		// кешируем названия столбцов при первом обращении к ним в БД так как
+		// названия столбцов публикуются только при первой операции, а
+		// в WAL postgres при INSERT/UPDATE/DELETE данные о названии столбцов не публикуются
+		r.mapper.CacheRelation(msg)
+		return false, nil
+
+	case *pglogrepl.InsertMessage:
+		// TODO: подойдет ли для идентификации отношения RelationID?
+		return r.handleRowChange(ctx, msg.RelationID, msg.Tuple)
+
+	case *pglogrepl.UpdateMessage:
+		return r.handleRowChange(ctx, msg.RelationID, msg.NewTuple)
+
+	case *pglogrepl.DeleteMessage:
+		return r.handleRowChange(ctx, msg.RelationID, msg.OldTuple)
+
+	case *pglogrepl.LogicalDecodingMessage:
+		// пользовательское сообщение
+		return false, nil
+
+	default:
+		slog.Debug("unhandled message type", "type", fmt.Sprintf("%T", msg))
+		return false, nil
+	}
+}
+
+// обработать изменение записи
+func (r *Replicator) handleRowChange(ctx context.Context, relID uint32, tuple *pglogrepl.TupleData) (bool, error) {
+	// TODO: сделать функцию *Replicator.handleRowChange
 	return true, nil
 }
 

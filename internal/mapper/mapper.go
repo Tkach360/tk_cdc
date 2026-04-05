@@ -20,3 +20,9 @@ func New(mrules []config.MappingRule) *Mapper {
 func (m *Mapper) CacheRelation(msg *pglogrepl.RelationMessage) {
 	// TODO: сделать метод *Mapper.CacheRelation
 }
+
+// получить все измененные ключи, связанные с данным отображением
+func (s *Mapper) GetKeys(relID uint32, tuple *pglogrepl.TupleData) []string {
+	// TODO: сделать метод *Mapper.GetKeys
+	return []string{}
+}

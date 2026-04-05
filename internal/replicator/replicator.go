@@ -276,7 +276,23 @@ func (r *Replicator) processLogicalMessage(ctx context.Context, msg pglogrepl.Me
 
 // обработать изменение записи
 func (r *Replicator) handleRowChange(ctx context.Context, relID uint32, tuple *pglogrepl.TupleData) (bool, error) {
-	// TODO: сделать функцию *Replicator.handleRowChange
+	if tuple == nil {
+		// TOAST-значения или другие случаи, когда данных нет
+		return false, nil
+	}
+
+	// получаем ключи redis, которые являются закешированными записями указанного отношения
+	keys := r.mapper.GetKeys(relID, tuple)
+	if len(keys) == 0 {
+		return false, nil
+	}
+
+	// удаляем ключи из redis
+	// TODO: может использовать redis.Pipeliner для удаления? нужно разобраться что лучше
+	r.redis.Del(ctx, keys...)
+
+	// TODO: может каким-то образом доставать имя отношения чтобы логи были более понятными?
+	slog.Info("invalidated cache keys", "relID", relID, "keys_count", len(keys))
 	return true, nil
 }
 

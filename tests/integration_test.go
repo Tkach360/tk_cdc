@@ -3,6 +3,8 @@ package intergation_test
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"os"
 	"testing"
 	"time"
 
@@ -13,6 +15,19 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
+
+func TestMain(m *testing.M) {
+	// при go test -v будут выводится и логи работы программы
+	opts := &slog.HandlerOptions{
+		Level:     slog.LevelDebug,
+		AddSource: false,
+	}
+
+	handler := slog.NewTextHandler(os.Stdout, opts)
+	slog.SetDefault(slog.New(handler))
+
+	os.Exit(m.Run())
+}
 
 func TestCDC_CacheInvalidation(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)

@@ -84,8 +84,8 @@ func (r *Replicator) Run(ctx context.Context) error {
 		r.slotName,
 		startLSN,
 		pglogrepl.StartReplicationOptions{PluginArgs: []string{
-			"proto_versin '1'",
-			fmt.Sprintf("publication_names '%s'", "pgoutput"),
+			"proto_version '1'",
+			fmt.Sprintf("publication_names '%s'", "test_pub"), // TODO: нужно вынести в конфиг имя публикации
 		}},
 	)
 	if err != nil {

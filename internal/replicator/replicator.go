@@ -11,20 +11,20 @@ import (
 	"time"
 
 	"github.com/Tkach360/tk_cdc/internal/config"
+	"github.com/Tkach360/tk_cdc/internal/invalidator"
 	"github.com/Tkach360/tk_cdc/internal/mapper"
 	"github.com/jackc/pglogrepl"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgproto3"
-	"github.com/redis/go-redis/v9"
 )
 
 type Replicator struct {
-	cfg      *config.Config
-	pgConfig *pgx.ConnConfig
-	redis    *redis.Client
-	mapper   *mapper.Mapper
-	slotName string
-	plugin   string
+	cfg         *config.Config
+	pgConfig    *pgx.ConnConfig
+	invalidator *invalidator.Invalidator
+	mapper      *mapper.Mapper
+	slotName    string
+	plugin      string
 }
 
 func New(cfg *config.Config) (*Replicator, error) {
@@ -33,26 +33,20 @@ func New(cfg *config.Config) (*Replicator, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse postgres DSN: %w", err)
 	}
-
 	pgConfig.RuntimeParams["replication"] = "database"
 
-	rdb := redis.NewClient(&redis.Options{
-		Addr:     cfg.Redis.Addr,
-		Password: cfg.Redis.Password,
-		DB:       cfg.Redis.DB,
-	})
-
-	if err := rdb.Ping(context.Background()).Err(); err != nil {
-		return nil, fmt.Errorf("redis ping failed: %w", err)
+	invalidator, err := invalidator.New(&cfg.Redis)
+	if err != nil {
+		return nil, fmt.Errorf("connection redis: %w", err)
 	}
 
 	return &Replicator{
-		cfg:      cfg,
-		pgConfig: pgConfig,
-		redis:    rdb,
-		mapper:   mapper.New(cfg.Mapping),
-		slotName: cfg.Postgres.ReplicationSlot,
-		plugin:   cfg.Postgres.Plugin,
+		cfg:         cfg,
+		pgConfig:    pgConfig,
+		invalidator: invalidator,
+		mapper:      mapper.New(cfg.Mapping),
+		slotName:    cfg.Postgres.ReplicationSlot,
+		plugin:      cfg.Postgres.Plugin,
 	}, nil
 }
 
@@ -287,9 +281,7 @@ func (r *Replicator) handleRowChange(ctx context.Context, relID uint32, tuple *p
 		return false, nil
 	}
 
-	// удаляем ключи из redis
-	// TODO: может использовать redis.Pipeliner для удаления? нужно разобраться что лучше
-	r.redis.Del(ctx, keys...)
+	r.invalidator.Invalidate(ctx, keys)
 
 	// TODO: может каким-то образом доставать имя отношения чтобы логи были более понятными?
 	slog.Info("invalidated cache keys", "relID", relID, "keys_count", len(keys))

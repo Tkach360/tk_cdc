@@ -80,7 +80,7 @@ func (r *Replicator) Run(ctx context.Context) error {
 	)
 	sysident, err := pglogrepl.IdentifySystem(ctx, conn.PgConn())
 	if err != nil {
-		return fmt.Errorf("ifentify system %w", err)
+		return fmt.Errorf("ifentify system: %w", err)
 	}
 
 	// зпауск потока репликации

@@ -62,16 +62,22 @@ func (r *Replicator) Run(ctx context.Context) error {
 	}
 	defer conn.Close(ctx)
 
-	if err := r.ensureReplicationSlot(ctx, conn); err != nil {
+	if err := r.ensureReplicationSlot(ctx); err != nil {
 		return fmt.Errorf("ensure replication slot: %w", err)
 	}
 
-	startLSN, err := r.getRestartLSN(ctx, conn)
+	startLSN, err := r.getRestartLSN(ctx)
 	if err != nil {
 		return fmt.Errorf("get restart LSN: %w", err)
 	}
 	slog.Info("starting replication", "slog", r.slotName, "start_lsn", startLSN.String())
 
+	cfg := conn.Config()
+	slog.Debug("connection check",
+		"replication_param", cfg.RuntimeParams["replication"],
+		"host", cfg.Host,
+		"database", cfg.Database,
+	)
 	sysident, err := pglogrepl.IdentifySystem(ctx, conn.PgConn())
 	if err != nil {
 		return fmt.Errorf("ifentify system %w", err)
@@ -162,67 +168,90 @@ func (r *Replicator) Run(ctx context.Context) error {
 	}
 }
 
-// проверить есть ли слот репликации, создать если нет и вернуть его
-func (r *Replicator) ensureReplicationSlot(ctx context.Context, conn *pgx.Conn) error {
+// выполнить операцию с созданием нового, нерепликационного соединения с БД
+func (r *Replicator) withAdminConnection(ctx context.Context, fn func(context.Context, *pgx.Conn) error) error {
+	admCfg := r.pgConfig.Copy()
+	delete(admCfg.RuntimeParams, "replication")
 
-	// спрашиваем у postgres позицию последнего сообщения, которе мы обработали
-	var exists bool
-	err := conn.QueryRow(
-		ctx,
-		"SELECT 1 FROM pg_replication_slots WHERE slot_name = $1",
-		r.slotName,
-	).Scan(&exists)
-
-	if errors.Is(err, pgx.ErrNoRows) {
-		// создание слота
-		slog.Info("creating replication slot", "slot", r.slotName, "plugin", r.plugin)
-		_, err = pglogrepl.CreateReplicationSlot(
-			ctx,
-			conn.PgConn(),
-			r.slotName,
-			r.plugin,
-			pglogrepl.CreateReplicationSlotOptions{Temporary: false},
-		)
-		if err != nil {
-			return fmt.Errorf("create slot: %w", err)
-		}
-		slog.Info("replication slot created")
-		return nil
-	}
-
+	conn, err := pgx.ConnectConfig(ctx, admCfg)
 	if err != nil {
-		return fmt.Errorf("check slot existence: %w", err)
+		return fmt.Errorf("admin connect: %w", err)
 	}
+	defer conn.Close(ctx)
 
-	slog.Info("replication slot exists", "slot", r.slotName)
-	return nil
+	return fn(ctx, conn)
+}
+
+// проверить есть ли слот репликации, создать если нет
+func (r *Replicator) ensureReplicationSlot(ctx context.Context) error {
+
+	// проверка наличия слота использует SQL, значит выполнить через репликационное соединение не выйдет
+	// и придется использовать другое соединение
+	return r.withAdminConnection(ctx, func(ctx context.Context, conn *pgx.Conn) error {
+		var exists bool
+		err := conn.QueryRow(
+			ctx,
+			"SELECT EXISTS(SELECT 1 FROM pg_replication_slots WHERE slot_name = $1)",
+			r.slotName,
+		).Scan(&exists)
+
+		if errors.Is(err, pgx.ErrNoRows) {
+			// создание слота
+			slog.Info("creating replication slot", "slot", r.slotName, "plugin", r.plugin)
+			_, err = pglogrepl.CreateReplicationSlot(
+				ctx,
+				conn.PgConn(),
+				r.slotName,
+				r.plugin,
+				pglogrepl.CreateReplicationSlotOptions{Temporary: false},
+			)
+			if err != nil {
+				return fmt.Errorf("create slot: %w", err)
+			}
+			slog.Info("replication slot created")
+			return nil
+		}
+
+		if err != nil {
+			return fmt.Errorf("check slot existence: %w", err)
+		}
+
+		slog.Info("replication slot exists", "slot", r.slotName)
+		return nil
+	})
 }
 
 // получить позицию LSN с которой следует продолжить чтение
-func (r *Replicator) getRestartLSN(ctx context.Context, conn *pgx.Conn) (pglogrepl.LSN, error) {
+func (r *Replicator) getRestartLSN(ctx context.Context) (pglogrepl.LSN, error) {
 
-	// TODO: по-хорошему нужно читать LSN откуда-то, а не использовать начало слота
-	var lsnStr string
-	err := conn.QueryRow(
-		ctx,
-		"SELECT confirmed_flush_lsn FROM pg_replication_slots WHERE slot_name = $1",
-		r.slotName,
-	).Scan(&lsnStr)
+	// получение позиции LSN требует SQL запроса, следовательно нужно использовать отдельное, нерепликационное соединение
+	var lsn pglogrepl.LSN
+	err := r.withAdminConnection(ctx, func(ctx context.Context, conn *pgx.Conn) error {
+		// TODO: по-хорошему нужно читать LSN откуда-то, а не использовать начало слота
+		var lsnStr string
+		err := conn.QueryRow(
+			ctx,
+			"SELECT confirmed_flush_lsn FROM pg_replication_slots WHERE slot_name = $1",
+			r.slotName,
+		).Scan(&lsnStr)
 
-	if err == pgx.ErrNoRows {
-		// новый слот
-		return 0, nil
-	}
-	if err != nil {
-		return 0, fmt.Errorf("query slot lsn: %w", err)
-	}
+		if err == pgx.ErrNoRows {
+			// новый слот
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("query slot lsn: %w", err)
+		}
 
-	lsn, err := pglogrepl.ParseLSN(lsnStr)
-	if err != nil {
-		return 0, fmt.Errorf("parse lsn '%s': %w", lsnStr, err)
-	}
+		lsn, err = pglogrepl.ParseLSN(lsnStr)
+		if err != nil {
+			return fmt.Errorf("parse lsn '%s': %w", lsnStr, err)
+		}
 
-	return lsn, nil
+		return nil
+	})
+
+	return lsn, err
 }
 
 // обработка логического сообщения

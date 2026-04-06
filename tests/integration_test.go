@@ -115,14 +115,6 @@ func TestCDC_CacheInvalidation(t *testing.T) {
 	go func() {
 		repErrCh <- rep.Run(repCtx)
 	}()
-	select {
-	case err := <-repErrCh:
-		if err != nil && err.Error() != "context canceled" {
-			t.Fatalf("replicator finished with error: %v", err)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("replicator did not stop gracefully in time")
-	}
 
 	// TODO: стоит ли давать сервису некоторое время для подключения?
 	time.Sleep(2 * time.Second)

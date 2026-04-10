@@ -40,21 +40,6 @@ func New(rules []MappingRule) *Mapper {
 	}
 }
 
-// нормализация имени отношения - добавление имени схемы перед именем таблицы если его нет
-// вернет имя_схемы.имя_таблицы, если схемы нет, то схема public
-// убирает двойные и одинарные кавычки
-func normalizeRelationName(name string) string {
-	name = strings.ReplaceAll(name, "\"", "")
-	name = strings.ReplaceAll(name, "'", "")
-
-	if !strings.Contains(name, ".") {
-		// TODO: не забыть добавить в документацию, что нужно указывать схему иначе схема public
-		// TODO: может сделать указание схемы по-умолчанию в конфиге?
-		name = "public." + name
-	}
-	return name
-}
-
 // получить <имя_схемы>.<имя_таблицы>
 func getQualifiedName(msg *pglogrepl.RelationMessage) string {
 	return msg.Namespace + "." + msg.RelationName
@@ -79,7 +64,7 @@ func (m *Mapper) GetKeys(relID uint32, tuple *pglogrepl.TupleData) []string {
 		return nil
 	}
 
-	relName := normalizeRelationName(relMsg.RelationName)
+	relName := relMsg.Namespace + "." + relMsg.RelationName
 	rule := m.rules[relName]
 
 	// TODO: явно нужно парсить KeyPattern в какую-то структуру и тут уже использовать всё готовое

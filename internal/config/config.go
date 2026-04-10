@@ -51,32 +51,56 @@ func Load(path string) (*Config, error) {
 	return &cfg, nil
 }
 
-func (c *Config) validate() error {
+var (
+	ErrPostgresDSNRequired             = errors.New("postgres.dsn is required")
+	ErrPostgresReplicationSlotRequired = errors.New("postgres.replication_slot is required")
+	ErrPostgresPluginUnsupported       = errors.New("only 'pgoutput' plugin is supported")
+	ErrRedisAddrRequired               = errors.New("redis.addr is required")
+	ErrMappingTableRequired            = errors.New("mapping: table is required")
+	ErrMappingKeyPatternRequired       = errors.New("mapping: key_pattern is required")
+	ErrMappingKeyPatternNoPlaceholder  = errors.New("mapping: key_pattern must contain {field} placeholder")
+)
 
-	// TODO: улучшить работу с ошибками для тестов
+type MappingError struct {
+	Index int
+	Err   error
+}
+
+func (e *MappingError) Error() string {
+	return fmt.Sprintf("mapping[%d]: %v", e.Index, e.Err)
+}
+
+func (e *MappingError) Unwrap() error {
+	return e.Err
+}
+
+func (c *Config) validate() error {
 	if c.Postgres.DSN == "" {
-		return errors.New("postgres.dsn is required")
+		return ErrPostgresDSNRequired
 	}
 	if c.Postgres.ReplicationSlot == "" {
-		return errors.New("postgres.replication_slot is required")
+		return ErrPostgresReplicationSlotRequired
 	}
 	if c.Postgres.Plugin != "pgoutput" {
-		return errors.New("only 'pgoutput' plugin is supported")
+		return ErrPostgresPluginUnsupported
 	}
+
 	if c.Redis.Addr == "" {
-		return errors.New("redis.addr is required")
+		return ErrRedisAddrRequired
 	}
+
 	for i, rule := range c.Mapping {
 		if rule.Table.Name == "" {
-			return fmt.Errorf("mapping[%d]: table is required", i)
+			return &MappingError{i, ErrMappingTableRequired}
 		}
 		if rule.KeyPattern == "" {
-			return fmt.Errorf("mapping[%d]: key_pattern is required", i)
+			return &MappingError{Index: i, Err: ErrMappingKeyPatternRequired}
 		}
 		// TODO: нужно сделать более доскональную проверку формата поля и парсить в какую-нибудь структуру
 		if !strings.Contains(rule.KeyPattern, "{") {
-			return fmt.Errorf("mapping[%d]: key_pattern must contain {field} placeholder", i)
+			return &MappingError{i, ErrMappingKeyPatternNoPlaceholder}
 		}
 	}
+
 	return nil
 }

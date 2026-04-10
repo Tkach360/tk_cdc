@@ -23,7 +23,7 @@ type Mapper struct {
 }
 
 type MappingRule struct {
-	Table      string `yaml:"table"`
+	Table      Table  `yaml:"table"`
 	KeyPattern string `yaml:"key_pattern"`
 }
 
@@ -31,8 +31,7 @@ func New(rules []MappingRule) *Mapper {
 
 	mrules := make(map[string]MappingRule)
 	for _, rule := range rules {
-		key := normalizeRelationName(rule.Table)
-		mrules[key] = rule
+		mrules[rule.Table.QualifiedName()] = rule
 	}
 
 	return &Mapper{

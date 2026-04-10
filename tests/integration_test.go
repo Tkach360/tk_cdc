@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Tkach360/tk_cdc/internal/config"
+	"github.com/Tkach360/tk_cdc/internal/mapper"
 	"github.com/Tkach360/tk_cdc/internal/replicator"
 	"github.com/jackc/pgx/v5"
 	"github.com/redis/go-redis/v9"
@@ -97,8 +98,8 @@ func TestCDC_CacheInvalidation(t *testing.T) {
 		Redis: config.RedisConfig{
 			Addr: redisAddr,
 		},
-		Mapping: []config.MappingRule{
-			{Table: "users", KeyPattern: "user:{id}"},
+		Mapping: []mapper.MappingRule{
+			{Table: mapper.Table{Schema: "public", Name: "users"}, KeyPattern: "user:{id}"},
 		},
 	}
 

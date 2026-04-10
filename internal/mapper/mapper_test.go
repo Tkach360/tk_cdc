@@ -18,7 +18,10 @@ func TestMapper_CacheRelation(t *testing.T) {
 		{
 			name: "cache relation when rule exists (without schema)",
 			setupRules: map[string]MappingRule{
-				"public.users": {Table: "users", KeyPattern: "user:{id}"},
+				"public.users": {
+					Table:      Table{Schema: "public", Name: "users"},
+					KeyPattern: "user:{id}",
+				},
 			},
 			relationMsg: &pglogrepl.RelationMessage{
 				RelationID:   12345,
@@ -32,7 +35,10 @@ func TestMapper_CacheRelation(t *testing.T) {
 		{
 			name: "cache relation when rule exists (with schema in rule)",
 			setupRules: map[string]MappingRule{
-				"public.users": {Table: "users", KeyPattern: "user:{id}"},
+				"public.users": {
+					Table:      Table{Schema: "public", Name: "users"},
+					KeyPattern: "user:{id}",
+				},
 			},
 			relationMsg: &pglogrepl.RelationMessage{
 				RelationID:   12345,
@@ -46,7 +52,10 @@ func TestMapper_CacheRelation(t *testing.T) {
 		{
 			name: "cache relation with custom schema",
 			setupRules: map[string]MappingRule{
-				"analytics.events": {Table: "events", KeyPattern: "event:{id}"},
+				"analytics.events": {
+					Table:      Table{Schema: "analytics", Name: "events"},
+					KeyPattern: "event:{id}",
+				},
 			},
 			relationMsg: &pglogrepl.RelationMessage{
 				RelationID:   67890,
@@ -60,7 +69,10 @@ func TestMapper_CacheRelation(t *testing.T) {
 		{
 			name: "do not cache when rule does not exist",
 			setupRules: map[string]MappingRule{
-				"public.orders": {Table: "orders", KeyPattern: "order:{number}"},
+				"public.orders": {
+					Table:      Table{Schema: "public", Name: "orders"},
+					KeyPattern: "order:{number}",
+				},
 			},
 			relationMsg: &pglogrepl.RelationMessage{
 				RelationID:   54321,
@@ -74,9 +86,18 @@ func TestMapper_CacheRelation(t *testing.T) {
 		{
 			name: "cache multiple relations",
 			setupRules: map[string]MappingRule{
-				"public.users":     {Table: "users", KeyPattern: "user:{id}"},
-				"public.orders":    {Table: "orders", KeyPattern: "order:{number}"},
-				"analytics.events": {Table: "events", KeyPattern: "event:{id}"},
+				"public.users": {
+					Table:      Table{Schema: "public", Name: "users"},
+					KeyPattern: "user:{id}",
+				},
+				"public.orders": {
+					Table:      Table{Schema: "public", Name: "orders"},
+					KeyPattern: "order:{number}",
+				},
+				"analytics.events": {
+					Table:      Table{Schema: "analytics", Name: "events"},
+					KeyPattern: "event:{id}",
+				},
 			},
 			relationMsg: &pglogrepl.RelationMessage{
 				RelationID:   11111,
@@ -90,7 +111,10 @@ func TestMapper_CacheRelation(t *testing.T) {
 		{
 			name: "handle relation with quoted name",
 			setupRules: map[string]MappingRule{
-				`"my-schema".users`: {Table: "users", KeyPattern: "user:{id}"},
+				"my-schema.users": { // нормализованный ключ без кавычек
+					Table:      Table{Schema: "my-schema", Name: "users"},
+					KeyPattern: "user:{id}",
+				},
 			},
 			relationMsg: &pglogrepl.RelationMessage{
 				RelationID:   99999,

@@ -33,7 +33,7 @@ func New(cfg *config.Config) (*Replicator, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse postgres DSN: %w", err)
 	}
-	pgConfig.RuntimeParams["replication"] = "database"
+	pgConfig.RuntimeParams["replication"] = "database" // нужно вынести в конфиг
 
 	invalidator, err := invalidator.New(&cfg.Redis)
 	if err != nil {

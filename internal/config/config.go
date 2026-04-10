@@ -67,7 +67,7 @@ func (c *Config) validate() error {
 		return errors.New("redis.addr is required")
 	}
 	for i, rule := range c.Mapping {
-		if rule.Table == "" {
+		if rule.Table.Name == "" {
 			return fmt.Errorf("mapping[%d]: table is required", i)
 		}
 		if rule.KeyPattern == "" {

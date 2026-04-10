@@ -149,3 +149,287 @@ func TestMapper_CacheRelation(t *testing.T) {
 		})
 	}
 }
+
+func TestMapper_GetKeys(t *testing.T) {
+	tests := []struct {
+		name           string
+		setupRules     map[string]MappingRule
+		relationMsg    *pglogrepl.RelationMessage
+		tupleData      *pglogrepl.TupleData
+		expectedKeys   []string
+		expectedExists bool // ожидаем ли ключи (если false, то nil)
+	}{
+		{
+			name: "get key for simple table without schema",
+			setupRules: map[string]MappingRule{
+				"public.users": {
+					Table:      Table{Schema: "public", Name: "users"},
+					KeyPattern: "user:{id}",
+				},
+			},
+			relationMsg: &pglogrepl.RelationMessage{
+				RelationID:   12345,
+				RelationName: "users",
+				Namespace:    "public",
+				Columns: []*pglogrepl.RelationMessageColumn{
+					{Name: "id"},
+					{Name: "name"},
+				},
+			},
+			tupleData: &pglogrepl.TupleData{
+				Columns: []*pglogrepl.TupleDataColumn{
+					{Data: []byte("42")},   // id
+					{Data: []byte("John")}, // name
+				},
+			},
+			expectedKeys:   []string{"user:42"},
+			expectedExists: true,
+		},
+		{
+			name: "get key for table with custom schema",
+			setupRules: map[string]MappingRule{
+				"analytics.events": {
+					Table:      Table{Schema: "analytics", Name: "events"},
+					KeyPattern: "event:{event_id}",
+				},
+			},
+			relationMsg: &pglogrepl.RelationMessage{
+				RelationID:   67890,
+				RelationName: "events",
+				Namespace:    "analytics",
+				Columns: []*pglogrepl.RelationMessageColumn{
+					{Name: "event_id"},
+					{Name: "user_id"},
+				},
+			},
+			tupleData: &pglogrepl.TupleData{
+				Columns: []*pglogrepl.TupleDataColumn{
+					{Data: []byte("12345")}, // event_id
+					{Data: []byte("678")},   // user_id
+				},
+			},
+			expectedKeys:   []string{"event:12345"},
+			expectedExists: true,
+		},
+		{
+			name: "get key with text column",
+			setupRules: map[string]MappingRule{
+				"public.products": {
+					Table:      Table{Schema: "public", Name: "products"},
+					KeyPattern: "product:{sku}",
+				},
+			},
+			relationMsg: &pglogrepl.RelationMessage{
+				RelationID:   11111,
+				RelationName: "products",
+				Namespace:    "public",
+				Columns: []*pglogrepl.RelationMessageColumn{
+					{Name: "sku"},
+					{Name: "price"},
+				},
+			},
+			tupleData: &pglogrepl.TupleData{
+				Columns: []*pglogrepl.TupleDataColumn{
+					{Data: []byte("ABC-123")},
+					{Data: []byte("99.99")},
+				},
+			},
+			expectedKeys:   []string{"product:ABC-123"},
+			expectedExists: true,
+		},
+		{
+			name: "return nil when relation not tracked",
+			setupRules: map[string]MappingRule{
+				"public.orders": {
+					Table:      Table{Schema: "public", Name: "orders"},
+					KeyPattern: "order:{id}",
+				},
+			},
+			relationMsg: &pglogrepl.RelationMessage{
+				RelationID:   99999,
+				RelationName: "users",
+				Namespace:    "public",
+				Columns: []*pglogrepl.RelationMessageColumn{
+					{Name: "id"},
+				},
+			},
+			tupleData: &pglogrepl.TupleData{
+				Columns: []*pglogrepl.TupleDataColumn{
+					{Data: []byte("100")},
+				},
+			},
+			expectedKeys:   nil,
+			expectedExists: false,
+		},
+		{
+			name: "handle multiple rules with different tables",
+			setupRules: map[string]MappingRule{
+				"public.users": {
+					Table:      Table{Schema: "public", Name: "users"},
+					KeyPattern: "user:{id}",
+				},
+				"public.orders": {
+					Table:      Table{Schema: "public", Name: "orders"},
+					KeyPattern: "order:{order_id}",
+				},
+			},
+			relationMsg: &pglogrepl.RelationMessage{
+				RelationID:   77777,
+				RelationName: "orders",
+				Namespace:    "public",
+				Columns: []*pglogrepl.RelationMessageColumn{
+					{Name: "order_id"},
+					{Name: "user_id"},
+				},
+			},
+			tupleData: &pglogrepl.TupleData{
+				Columns: []*pglogrepl.TupleDataColumn{
+					{Data: []byte("500")},
+					{Data: []byte("42")},
+				},
+			},
+			expectedKeys:   []string{"order:500"},
+			expectedExists: true,
+		},
+		{
+			name: "handle key pattern without curly braces",
+			setupRules: map[string]MappingRule{
+				"public.simple": {
+					Table:      Table{Schema: "public", Name: "simple"},
+					KeyPattern: "static_key",
+				},
+			},
+			relationMsg: &pglogrepl.RelationMessage{
+				RelationID:   44444,
+				RelationName: "simple",
+				Namespace:    "public",
+				Columns: []*pglogrepl.RelationMessageColumn{
+					{Name: "id"},
+				},
+			},
+			tupleData: &pglogrepl.TupleData{
+				Columns: []*pglogrepl.TupleDataColumn{
+					{Data: []byte("123")},
+				},
+			},
+			expectedKeys:   []string{"static_key"},
+			expectedExists: true,
+		},
+		{
+			name: "handle null column value (currently returns empty string)",
+			setupRules: map[string]MappingRule{
+				"public.nullable": {
+					Table:      Table{Schema: "public", Name: "nullable"},
+					KeyPattern: "key:{value}",
+				},
+			},
+			relationMsg: &pglogrepl.RelationMessage{
+				RelationID:   33333,
+				RelationName: "nullable",
+				Namespace:    "public",
+				Columns: []*pglogrepl.RelationMessageColumn{
+					{Name: "value"},
+				},
+			},
+			tupleData: &pglogrepl.TupleData{
+				Columns: []*pglogrepl.TupleDataColumn{
+					{Data: nil},
+				},
+			},
+			expectedKeys:   []string{"key:"},
+			expectedExists: true,
+		},
+		// TODO: при реализации ключей с множественными полями добавить тест
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Создаем маппер и кешируем relation
+			mapper := &Mapper{
+				rules:   tt.setupRules,
+				relData: make(map[uint32]*pglogrepl.RelationMessage),
+			}
+
+			// Кешируем relation
+			mapper.CacheRelation(tt.relationMsg)
+
+			// Вызываем GetKeys
+			keys := mapper.GetKeys(tt.relationMsg.RelationID, tt.tupleData)
+
+			if !tt.expectedExists {
+				assert.Nil(t, keys, "Expected nil keys for untracked relation")
+			} else {
+				assert.NotNil(t, keys, "Expected non-nil keys")
+				assert.Equal(t, tt.expectedKeys, keys, "Keys don't match expected")
+			}
+		})
+	}
+}
+
+func TestMapper_GetKeys_DifferentDataTypes(t *testing.T) {
+	testCases := []struct {
+		name     string
+		dataType uint32
+		data     []byte
+		expected string
+	}{
+		{
+			name:     "int4",
+			data:     []byte("12345"),
+			expected: "key:12345",
+		},
+		{
+			name:     "int8",
+			data:     []byte("9223372036854775807"),
+			expected: "key:9223372036854775807",
+		},
+		{
+			name:     "text",
+			data:     []byte("some text value"),
+			expected: "key:some text value",
+		},
+		{
+			name:     "bool true",
+			data:     []byte("t"),
+			expected: "key:t",
+		},
+		{
+			name:     "float8",
+			data:     []byte("123.456"),
+			expected: "key:123.456",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			mapper := &Mapper{
+				rules: map[string]MappingRule{
+					"public.test": {
+						Table:      Table{Schema: "public", Name: "test"},
+						KeyPattern: "key:{value}",
+					},
+				},
+				relData: make(map[uint32]*pglogrepl.RelationMessage),
+			}
+
+			relationMsg := &pglogrepl.RelationMessage{
+				RelationID:   999,
+				RelationName: "test",
+				Namespace:    "public",
+				Columns: []*pglogrepl.RelationMessageColumn{
+					{Name: "value", DataType: tc.dataType},
+				},
+			}
+			mapper.CacheRelation(relationMsg)
+
+			tupleData := &pglogrepl.TupleData{
+				Columns: []*pglogrepl.TupleDataColumn{
+					{Data: tc.data},
+				},
+			}
+
+			keys := mapper.GetKeys(999, tupleData)
+			assert.Equal(t, []string{tc.expected}, keys)
+		})
+	}
+}

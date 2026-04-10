@@ -3,7 +3,6 @@ package mapper
 import (
 	"testing"
 
-	"github.com/Tkach360/tk_cdc/internal/config"
 	"github.com/jackc/pglogrepl"
 	"github.com/stretchr/testify/assert"
 )
@@ -11,14 +10,14 @@ import (
 func TestMapper_CacheRelation(t *testing.T) {
 	tests := []struct {
 		name           string
-		setupRules     map[string]config.MappingRule
+		setupRules     map[string]MappingRule
 		relationMsg    *pglogrepl.RelationMessage
 		expectedCached bool
 		expectedRelID  uint32
 	}{
 		{
 			name: "cache relation when rule exists (without schema)",
-			setupRules: map[string]config.MappingRule{
+			setupRules: map[string]MappingRule{
 				"public.users": {Table: "users", KeyPattern: "user:{id}"},
 			},
 			relationMsg: &pglogrepl.RelationMessage{
@@ -32,7 +31,7 @@ func TestMapper_CacheRelation(t *testing.T) {
 		},
 		{
 			name: "cache relation when rule exists (with schema in rule)",
-			setupRules: map[string]config.MappingRule{
+			setupRules: map[string]MappingRule{
 				"public.users": {Table: "users", KeyPattern: "user:{id}"},
 			},
 			relationMsg: &pglogrepl.RelationMessage{
@@ -46,7 +45,7 @@ func TestMapper_CacheRelation(t *testing.T) {
 		},
 		{
 			name: "cache relation with custom schema",
-			setupRules: map[string]config.MappingRule{
+			setupRules: map[string]MappingRule{
 				"analytics.events": {Table: "events", KeyPattern: "event:{id}"},
 			},
 			relationMsg: &pglogrepl.RelationMessage{
@@ -60,7 +59,7 @@ func TestMapper_CacheRelation(t *testing.T) {
 		},
 		{
 			name: "do not cache when rule does not exist",
-			setupRules: map[string]config.MappingRule{
+			setupRules: map[string]MappingRule{
 				"public.orders": {Table: "orders", KeyPattern: "order:{number}"},
 			},
 			relationMsg: &pglogrepl.RelationMessage{
@@ -74,7 +73,7 @@ func TestMapper_CacheRelation(t *testing.T) {
 		},
 		{
 			name: "cache multiple relations",
-			setupRules: map[string]config.MappingRule{
+			setupRules: map[string]MappingRule{
 				"public.users":     {Table: "users", KeyPattern: "user:{id}"},
 				"public.orders":    {Table: "orders", KeyPattern: "order:{number}"},
 				"analytics.events": {Table: "events", KeyPattern: "event:{id}"},
@@ -90,7 +89,7 @@ func TestMapper_CacheRelation(t *testing.T) {
 		},
 		{
 			name: "handle relation with quoted name",
-			setupRules: map[string]config.MappingRule{
+			setupRules: map[string]MappingRule{
 				`"my-schema".users`: {Table: "users", KeyPattern: "user:{id}"},
 			},
 			relationMsg: &pglogrepl.RelationMessage{
@@ -106,16 +105,13 @@ func TestMapper_CacheRelation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Arrange
 			mapper := &Mapper{
 				rules:   tt.setupRules,
 				relData: make(map[uint32]*pglogrepl.RelationMessage),
 			}
 
-			// Act
 			mapper.CacheRelation(tt.relationMsg)
 
-			// Assert
 			cachedMsg, exists := mapper.relData[tt.relationMsg.RelationID]
 
 			if tt.expectedCached {

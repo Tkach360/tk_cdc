@@ -9,13 +9,14 @@ import (
 	"os"
 	"strings"
 
+	"github.com/Tkach360/tk_cdc/internal/mapper"
 	"gopkg.in/yaml.v3"
 )
 
 type Config struct {
-	Postgres PostgresConfig `yaml:"postgres"`
-	Redis    RedisConfig    `yaml:"redis"`
-	Mapping  []MappingRule  `yaml:"mapping"`
+	Postgres PostgresConfig       `yaml:"postgres"`
+	Redis    RedisConfig          `yaml:"redis"`
+	Mapping  []mapper.MappingRule `yaml:"mapping"`
 }
 
 type PostgresConfig struct {
@@ -28,11 +29,6 @@ type RedisConfig struct {
 	Addr     string `yaml:"addr"`
 	Password string `yaml:"password"`
 	DB       int    `yaml:"db"`
-}
-
-type MappingRule struct {
-	Table      string `yaml:"table"`
-	KeyPattern string `yaml:"key_pattern"`
 }
 
 func Load(path string) (*Config, error) {

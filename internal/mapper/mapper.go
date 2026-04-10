@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/Tkach360/tk_cdc/internal/config"
 	"github.com/jackc/pglogrepl"
 )
 
@@ -15,7 +14,7 @@ type Mapper struct {
 	// правила маппинга
 	// - key - имя отображения (таблицы) в виде схема.имя
 	// - value - собственно правило
-	rules map[string]config.MappingRule
+	rules map[string]MappingRule
 
 	// хеш-таблица данных об отношениях
 	// - key - RelationID
@@ -23,9 +22,14 @@ type Mapper struct {
 	relData map[uint32]*pglogrepl.RelationMessage
 }
 
-func New(rules []config.MappingRule) *Mapper {
+type MappingRule struct {
+	Table      string `yaml:"table"`
+	KeyPattern string `yaml:"key_pattern"`
+}
 
-	mrules := make(map[string]config.MappingRule)
+func New(rules []MappingRule) *Mapper {
+
+	mrules := make(map[string]MappingRule)
 	for _, rule := range rules {
 		key := normalizeRelationName(rule.Table)
 		mrules[key] = rule
@@ -39,7 +43,11 @@ func New(rules []config.MappingRule) *Mapper {
 
 // нормализация имени отношения - добавление имени схемы перед именем таблицы если его нет
 // вернет имя_схемы.имя_таблицы, если схемы нет, то схема public
+// убирает двойные и одинарные кавычки
 func normalizeRelationName(name string) string {
+	name = strings.ReplaceAll(name, "\"", "")
+	name = strings.ReplaceAll(name, "'", "")
+
 	if !strings.Contains(name, ".") {
 		// TODO: не забыть добавить в документацию, что нужно указывать схему иначе схема public
 		// TODO: может сделать указание схемы по-умолчанию в конфиге?
@@ -48,11 +56,16 @@ func normalizeRelationName(name string) string {
 	return name
 }
 
+// получить <имя_схемы>.<имя_таблицы>
+func getQualifiedName(msg *pglogrepl.RelationMessage) string {
+	return msg.Namespace + "." + msg.RelationName
+}
+
 // закешировать данные об отображении (таблице)
 func (m *Mapper) CacheRelation(msg *pglogrepl.RelationMessage) {
 
 	// добавляем данные об отслеживаемом отображении только если есть соответствующее правило
-	relName := normalizeRelationName(msg.RelationName)
+	relName := getQualifiedName(msg)
 	if _, ok := m.rules[relName]; ok {
 		m.relData[msg.RelationID] = msg
 	}

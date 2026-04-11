@@ -282,7 +282,7 @@ redis:
 mapping:
   default_schema: "custom"
   rules:
-    - table: "explicit:users"
+    - table: "explicit.users"
       key_pattern: "user:{id}"
 `,
 			wantErr: false,
@@ -293,7 +293,7 @@ mapping:
 			},
 		},
 		{
-			name: "empty schema in table (':table') - uses default_schema",
+			name: "empty schema in table ('.table') - uses default_schema",
 			yamlContent: `
 postgres:
   dsn: "postgres://localhost:5432/db"
@@ -304,7 +304,7 @@ redis:
 mapping:
   default_schema: "custom"
   rules:
-    - table: ":temp"
+    - table: ".temp"
       key_pattern: "temp:{id}"
 `,
 			wantErr: false,
@@ -435,16 +435,94 @@ mapping:
 				assert.Equal(t, "redis:6379", cfg.Redis.Addr)
 			},
 		},
+		{
+			name: "multiple rules with mixed schema definitions",
+			yamlContent: `
+postgres:
+  dsn: "postgres://localhost:5432/db"
+  replication_slot: "slot1"
+  plugin: "pgoutput"
+redis:
+  addr: "localhost:6379"
+mapping:
+  default_schema: "custom"
+  rules:
+    - table: "users"
+      key_pattern: "user:{id}"
+    - table: "explicit.orders"
+      key_pattern: "order:{order_id}"
+    - table: ".temp"
+      key_pattern: "temp:{id}"
+    - table: "analytics.events"
+      key_pattern: "event:{event_id}"
+`,
+			wantErr: false,
+			checkFunc: func(t *testing.T, cfg *Config) {
+				assert.Equal(t, "custom", cfg.Mapping.DefaultSchema)
+				require.Len(t, cfg.Mapping.Rules, 4)
+
+				assert.Equal(t, "custom", cfg.Mapping.Rules[0].Table.Schema)
+				assert.Equal(t, "users", cfg.Mapping.Rules[0].Table.Name)
+				assert.Equal(t, "user:{id}", cfg.Mapping.Rules[0].KeyPattern)
+
+				assert.Equal(t, "explicit", cfg.Mapping.Rules[1].Table.Schema)
+				assert.Equal(t, "orders", cfg.Mapping.Rules[1].Table.Name)
+				assert.Equal(t, "order:{order_id}", cfg.Mapping.Rules[1].KeyPattern)
+
+				assert.Equal(t, "custom", cfg.Mapping.Rules[2].Table.Schema)
+				assert.Equal(t, "temp", cfg.Mapping.Rules[2].Table.Name)
+				assert.Equal(t, "temp:{id}", cfg.Mapping.Rules[2].KeyPattern)
+
+				assert.Equal(t, "analytics", cfg.Mapping.Rules[3].Table.Schema)
+				assert.Equal(t, "events", cfg.Mapping.Rules[3].Table.Name)
+				assert.Equal(t, "event:{event_id}", cfg.Mapping.Rules[3].KeyPattern)
+			},
+		},
+		{
+			name: "no rules defined",
+			yamlContent: `
+postgres:
+  dsn: "postgres://localhost:5432/db"
+  replication_slot: "slot1"
+  plugin: "pgoutput"
+redis:
+  addr: "localhost:6379"
+mapping:
+  default_schema: "public"
+  rules: []
+`,
+			wantErr: false,
+			checkFunc: func(t *testing.T, cfg *Config) {
+				assert.Equal(t, "public", cfg.Mapping.DefaultSchema)
+				assert.Empty(t, cfg.Mapping.Rules)
+			},
+		},
+		{
+			name: "no rules and no default_schema",
+			yamlContent: `
+postgres:
+  dsn: "postgres://localhost:5432/db"
+  replication_slot: "slot1"
+  plugin: "pgoutput"
+redis:
+  addr: "localhost:6379"
+mapping:
+  rules: []
+`,
+			wantErr: false,
+			checkFunc: func(t *testing.T, cfg *Config) {
+				assert.Equal(t, "public", cfg.Mapping.DefaultSchema)
+				assert.Empty(t, cfg.Mapping.Rules)
+			},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-
 			for k, v := range tt.env {
 				os.Setenv(k, v)
 				defer os.Unsetenv(k)
 			}
-
 			cfgPath := createTempConfig(t, tt.yamlContent)
 			cfg, err := Load(cfgPath)
 

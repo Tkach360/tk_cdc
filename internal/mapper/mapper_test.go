@@ -1,6 +1,7 @@
 package mapper
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/jackc/pglogrepl"
@@ -430,6 +431,92 @@ func TestMapper_GetKeys_DifferentDataTypes(t *testing.T) {
 
 			keys := mapper.GetKeys(999, tupleData)
 			assert.Equal(t, []string{tc.expected}, keys)
+		})
+	}
+}
+
+func TestExtractColumnName(t *testing.T) {
+	tests := []struct {
+		name        string
+		keyPattern  string
+		expected    string
+		expectedErr error
+	}{
+		{
+			name:        "valid pattern with simple placeholder",
+			keyPattern:  "user:{id}",
+			expected:    "id",
+			expectedErr: nil,
+		},
+		{
+			name:        "valid pattern with underscore",
+			keyPattern:  "user:{user_id}",
+			expected:    "user_id",
+			expectedErr: nil,
+		},
+		{
+			name:        "valid pattern with text before and after braces",
+			keyPattern:  "prefix_{code}_suffix",
+			expected:    "code",
+			expectedErr: nil,
+		},
+		{
+			name:        "valid pattern with only braces",
+			keyPattern:  "{id}",
+			expected:    "id",
+			expectedErr: nil,
+		},
+		{
+			name:        "valid pattern with special chars in placeholder",
+			keyPattern:  "user:{user-id}",
+			expected:    "user-id",
+			expectedErr: nil,
+		},
+		{
+			name:        "multiple braces - returns first placeholder",
+			keyPattern:  "user:{id}:{name}",
+			expected:    "id",
+			expectedErr: nil,
+		},
+		{
+			name:        "missing opening brace",
+			keyPattern:  "user:id}",
+			expected:    "",
+			expectedErr: ErrMissingOpeningBrace,
+		},
+		{
+			name:        "missing closing brace",
+			keyPattern:  "user:{id",
+			expected:    "",
+			expectedErr: ErrMissingClosingBrace,
+		},
+		{
+			name:        "empty column name",
+			keyPattern:  "user:{}",
+			expected:    "",
+			expectedErr: ErrEmptyColumnName,
+		},
+		{
+			name:        "closing brace before opening brace",
+			keyPattern:  "user:}id{",
+			expected:    "",
+			expectedErr: ErrClosingBraceBeforeOpening,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := extractColumnName(tt.keyPattern)
+
+			if tt.expectedErr != nil {
+				assert.Error(t, err)
+				assert.True(t, errors.Is(err, tt.expectedErr),
+					"Expected error %v, got %v", tt.expectedErr, err)
+				assert.Empty(t, result)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expected, result)
+			}
 		})
 	}
 }

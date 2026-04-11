@@ -22,9 +22,10 @@ func TestConfigValidate(t *testing.T) {
 			name: "missing postgres dsn",
 			config: &Config{
 				Postgres: PostgresConfig{
-					DSN:             "",
-					ReplicationSlot: "test_slot",
-					Plugin:          "pgoutput",
+					DSN:              "",
+					ReplicationSlot:  "test_slot",
+					Plugin:           "pgoutput",
+					PublicationNames: "",
 				},
 				Redis: RedisConfig{
 					Addr: "localhost:6379",
@@ -38,9 +39,10 @@ func TestConfigValidate(t *testing.T) {
 			name: "missing replication slot",
 			config: &Config{
 				Postgres: PostgresConfig{
-					DSN:             "postgres://localhost:5432/db",
-					ReplicationSlot: "",
-					Plugin:          "pgoutput",
+					DSN:              "postgres://localhost:5432/db",
+					ReplicationSlot:  "",
+					Plugin:           "pgoutput",
+					PublicationNames: "",
 				},
 				Redis: RedisConfig{
 					Addr: "localhost:6379",
@@ -54,9 +56,10 @@ func TestConfigValidate(t *testing.T) {
 			name: "unsupported plugin",
 			config: &Config{
 				Postgres: PostgresConfig{
-					DSN:             "postgres://localhost:5432/db",
-					ReplicationSlot: "test_slot",
-					Plugin:          "wal2json",
+					DSN:              "postgres://localhost:5432/db",
+					ReplicationSlot:  "test_slot",
+					Plugin:           "wal2json",
+					PublicationNames: "",
 				},
 				Redis: RedisConfig{
 					Addr: "localhost:6379",
@@ -70,9 +73,10 @@ func TestConfigValidate(t *testing.T) {
 			name: "missing redis addr",
 			config: &Config{
 				Postgres: PostgresConfig{
-					DSN:             "postgres://localhost:5432/db",
-					ReplicationSlot: "test_slot",
-					Plugin:          "pgoutput",
+					DSN:              "postgres://localhost:5432/db",
+					ReplicationSlot:  "test_slot",
+					Plugin:           "pgoutput",
+					PublicationNames: "my_publication",
 				},
 				Redis: RedisConfig{
 					Addr: "",
@@ -83,12 +87,30 @@ func TestConfigValidate(t *testing.T) {
 			},
 		},
 		{
+			name: "missing publication names with pgoutput",
+			config: &Config{
+				Postgres: PostgresConfig{
+					DSN:              "postgres://localhost:5432/db",
+					ReplicationSlot:  "test_slot",
+					Plugin:           "pgoutput",
+					PublicationNames: "",
+				},
+				Redis: RedisConfig{
+					Addr: "localhost:6379",
+				},
+			},
+			checkErr: func(err error) bool {
+				return errors.Is(err, ErrPostgresPublicationNamesRequired)
+			},
+		},
+		{
 			name: "missing table name in mapping",
 			config: &Config{
 				Postgres: PostgresConfig{
-					DSN:             "postgres://localhost:5432/db",
-					ReplicationSlot: "test_slot",
-					Plugin:          "pgoutput",
+					DSN:              "postgres://localhost:5432/db",
+					ReplicationSlot:  "test_slot",
+					Plugin:           "pgoutput",
+					PublicationNames: "my_publication",
 				},
 				Redis: RedisConfig{
 					Addr: "localhost:6379",
@@ -118,9 +140,10 @@ func TestConfigValidate(t *testing.T) {
 			name: "missing key pattern",
 			config: &Config{
 				Postgres: PostgresConfig{
-					DSN:             "postgres://localhost:5432/db",
-					ReplicationSlot: "test_slot",
-					Plugin:          "pgoutput",
+					DSN:              "postgres://localhost:5432/db",
+					ReplicationSlot:  "test_slot",
+					Plugin:           "pgoutput",
+					PublicationNames: "my_publication",
 				},
 				Redis: RedisConfig{
 					Addr: "localhost:6379",
@@ -147,9 +170,10 @@ func TestConfigValidate(t *testing.T) {
 			name: "key pattern without placeholder",
 			config: &Config{
 				Postgres: PostgresConfig{
-					DSN:             "postgres://localhost:5432/db",
-					ReplicationSlot: "test_slot",
-					Plugin:          "pgoutput",
+					DSN:              "postgres://localhost:5432/db",
+					ReplicationSlot:  "test_slot",
+					Plugin:           "pgoutput",
+					PublicationNames: "my_publication",
 				},
 				Redis: RedisConfig{
 					Addr: "localhost:6379",
@@ -176,9 +200,36 @@ func TestConfigValidate(t *testing.T) {
 			name: "valid config",
 			config: &Config{
 				Postgres: PostgresConfig{
-					DSN:             "postgres://localhost:5432/db",
-					ReplicationSlot: "test_slot",
-					Plugin:          "pgoutput",
+					DSN:              "postgres://localhost:5432/db",
+					ReplicationSlot:  "test_slot",
+					Plugin:           "pgoutput",
+					PublicationNames: "my_publication",
+				},
+				Redis: RedisConfig{
+					Addr: "localhost:6379",
+				},
+				Mapping: mapper.MappingConfig{
+					DefaultSchema: "public",
+					Rules: []mapper.MappingRule{
+						{
+							Table:      mapper.Table{Name: "users"},
+							KeyPattern: "user:{id}",
+						},
+					},
+				},
+			},
+			checkErr: func(err error) bool {
+				return err == nil
+			},
+		},
+		{
+			name: "valid config with multiple publications",
+			config: &Config{
+				Postgres: PostgresConfig{
+					DSN:              "postgres://localhost:5432/db",
+					ReplicationSlot:  "test_slot",
+					Plugin:           "pgoutput",
+					PublicationNames: "pub1,pub2,pub3",
 				},
 				Redis: RedisConfig{
 					Addr: "localhost:6379",
@@ -230,6 +281,7 @@ postgres:
   dsn: "postgres://localhost:5432/db"
   replication_slot: "slot1"
   plugin: "pgoutput"
+  publication_names: "my_pub"
 redis:
   addr: "localhost:6379"
 mapping:
@@ -246,6 +298,7 @@ mapping:
 				assert.Equal(t, "custom", rule.Table.Schema)
 				assert.Equal(t, "users", rule.Table.Name)
 				assert.Equal(t, "user:{id}", rule.KeyPattern)
+				assert.Equal(t, "my_pub", cfg.Postgres.PublicationNames)
 			},
 		},
 		{
@@ -255,6 +308,7 @@ postgres:
   dsn: "postgres://localhost:5432/db"
   replication_slot: "slot1"
   plugin: "pgoutput"
+  publication_names: "orders_pub"
 redis:
   addr: "localhost:6379"
 mapping:
@@ -268,6 +322,7 @@ mapping:
 				rule := cfg.Mapping.Rules[0]
 				assert.Equal(t, "public", rule.Table.Schema)
 				assert.Equal(t, "orders", rule.Table.Name)
+				assert.Equal(t, "orders_pub", cfg.Postgres.PublicationNames)
 			},
 		},
 		{
@@ -277,6 +332,7 @@ postgres:
   dsn: "postgres://localhost:5432/db"
   replication_slot: "slot1"
   plugin: "pgoutput"
+  publication_names: "test_pub"
 redis:
   addr: "localhost:6379"
 mapping:
@@ -290,6 +346,7 @@ mapping:
 				rule := cfg.Mapping.Rules[0]
 				assert.Equal(t, "explicit", rule.Table.Schema)
 				assert.Equal(t, "users", rule.Table.Name)
+				assert.Equal(t, "test_pub", cfg.Postgres.PublicationNames)
 			},
 		},
 		{
@@ -299,6 +356,7 @@ postgres:
   dsn: "postgres://localhost:5432/db"
   replication_slot: "slot1"
   plugin: "pgoutput"
+  publication_names: "temp_pub"
 redis:
   addr: "localhost:6379"
 mapping:
@@ -312,6 +370,7 @@ mapping:
 				rule := cfg.Mapping.Rules[0]
 				assert.Equal(t, "custom", rule.Table.Schema)
 				assert.Equal(t, "temp", rule.Table.Name)
+				assert.Equal(t, "temp_pub", cfg.Postgres.PublicationNames)
 			},
 		},
 		{
@@ -320,6 +379,7 @@ mapping:
 postgres:
   replication_slot: "slot1"
   plugin: "pgoutput"
+  publication_names: "my_pub"
 redis:
   addr: "localhost:6379"
 mapping:
@@ -336,6 +396,7 @@ postgres:
   dsn: "postgres://localhost:5432/db"
   replication_slot: "slot1"
   plugin: "pgoutput"
+  publication_names: "my_pub"
 redis:
   db: 0
 mapping:
@@ -352,6 +413,23 @@ postgres:
   dsn: "postgres://localhost:5432/db"
   replication_slot: "slot1"
   plugin: "wal2json"
+  publication_names: "my_pub"
+redis:
+  addr: "localhost:6379"
+mapping:
+  rules:
+    - table: "users"
+      key_pattern: "user:{id}"
+`,
+			wantErr: true,
+		},
+		{
+			name: "missing publication_names with pgoutput",
+			yamlContent: `
+postgres:
+  dsn: "postgres://localhost:5432/db"
+  replication_slot: "slot1"
+  plugin: "pgoutput"
 redis:
   addr: "localhost:6379"
 mapping:
@@ -368,6 +446,7 @@ postgres:
   dsn: "postgres://localhost:5432/db"
   replication_slot: "slot1"
   plugin: "pgoutput"
+  publication_names: "my_pub"
 redis:
   addr: "localhost:6379"
 mapping:
@@ -384,6 +463,7 @@ postgres:
   dsn: "postgres://localhost:5432/db"
   replication_slot: "slot1"
   plugin: "pgoutput"
+  publication_names: "my_pub"
 redis:
   addr: "localhost:6379"
 mapping:
@@ -400,6 +480,7 @@ postgres:
   dsn: "postgres://localhost:5432/db"
   replication_slot: "slot1"
   plugin: "pgoutput"
+  publication_names: "my_pub"
 redis:
   addr: "localhost:6379"
 mapping:
@@ -416,6 +497,7 @@ postgres:
   dsn: "${POSTGRES_DSN}"
   replication_slot: "${PG_SLOT}"
   plugin: "pgoutput"
+  publication_names: "${PG_PUBLICATIONS}"
 redis:
   addr: "${REDIS_ADDR}"
 mapping:
@@ -424,15 +506,17 @@ mapping:
       key_pattern: "user:{id}"
 `,
 			env: map[string]string{
-				"POSTGRES_DSN": "postgres://test:pass@localhost:5432/testdb",
-				"PG_SLOT":      "test_slot",
-				"REDIS_ADDR":   "redis:6379",
+				"POSTGRES_DSN":    "postgres://test:pass@localhost:5432/testdb",
+				"PG_SLOT":         "test_slot",
+				"REDIS_ADDR":      "redis:6379",
+				"PG_PUBLICATIONS": "env_pub1,env_pub2",
 			},
 			wantErr: false,
 			checkFunc: func(t *testing.T, cfg *Config) {
 				assert.Equal(t, "postgres://test:pass@localhost:5432/testdb", cfg.Postgres.DSN)
 				assert.Equal(t, "test_slot", cfg.Postgres.ReplicationSlot)
 				assert.Equal(t, "redis:6379", cfg.Redis.Addr)
+				assert.Equal(t, "env_pub1,env_pub2", cfg.Postgres.PublicationNames)
 			},
 		},
 		{
@@ -442,6 +526,7 @@ postgres:
   dsn: "postgres://localhost:5432/db"
   replication_slot: "slot1"
   plugin: "pgoutput"
+  publication_names: "multi_pub"
 redis:
   addr: "localhost:6379"
 mapping:
@@ -476,6 +561,8 @@ mapping:
 				assert.Equal(t, "analytics", cfg.Mapping.Rules[3].Table.Schema)
 				assert.Equal(t, "events", cfg.Mapping.Rules[3].Table.Name)
 				assert.Equal(t, "event:{event_id}", cfg.Mapping.Rules[3].KeyPattern)
+
+				assert.Equal(t, "multi_pub", cfg.Postgres.PublicationNames)
 			},
 		},
 		{
@@ -485,6 +572,7 @@ postgres:
   dsn: "postgres://localhost:5432/db"
   replication_slot: "slot1"
   plugin: "pgoutput"
+  publication_names: "empty_rules_pub"
 redis:
   addr: "localhost:6379"
 mapping:
@@ -495,6 +583,7 @@ mapping:
 			checkFunc: func(t *testing.T, cfg *Config) {
 				assert.Equal(t, "public", cfg.Mapping.DefaultSchema)
 				assert.Empty(t, cfg.Mapping.Rules)
+				assert.Equal(t, "empty_rules_pub", cfg.Postgres.PublicationNames)
 			},
 		},
 		{
@@ -504,6 +593,7 @@ postgres:
   dsn: "postgres://localhost:5432/db"
   replication_slot: "slot1"
   plugin: "pgoutput"
+  publication_names: "minimal_pub"
 redis:
   addr: "localhost:6379"
 mapping:
@@ -513,6 +603,7 @@ mapping:
 			checkFunc: func(t *testing.T, cfg *Config) {
 				assert.Equal(t, "public", cfg.Mapping.DefaultSchema)
 				assert.Empty(t, cfg.Mapping.Rules)
+				assert.Equal(t, "minimal_pub", cfg.Postgres.PublicationNames)
 			},
 		},
 	}

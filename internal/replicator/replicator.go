@@ -91,7 +91,7 @@ func (r *Replicator) Run(ctx context.Context) error {
 		startLSN,
 		pglogrepl.StartReplicationOptions{PluginArgs: []string{
 			"proto_version '1'",
-			fmt.Sprintf("publication_names '%s'", "test_pub"), // TODO: нужно вынести в конфиг имя публикации
+			fmt.Sprintf("publication_names '%s'", r.cfg.Postgres.PublicationNames),
 		}},
 	)
 	if err != nil {

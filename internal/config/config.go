@@ -19,9 +19,10 @@ type Config struct {
 }
 
 type PostgresConfig struct {
-	DSN             string `yaml:"dsn"`
-	ReplicationSlot string `yaml:"replication_slot"`
-	Plugin          string `yaml:"plugin"`
+	DSN              string `yaml:"dsn"`
+	ReplicationSlot  string `yaml:"replication_slot"`
+	Plugin           string `yaml:"plugin"`
+	PublicationNames string `yaml:"publication_names"` // добавил
 }
 
 type RedisConfig struct {
@@ -59,6 +60,10 @@ func (c *Config) validate() error {
 	}
 	if c.Postgres.Plugin != "pgoutput" {
 		return ErrPostgresPluginUnsupported
+	}
+
+	if c.Postgres.PublicationNames == "" {
+		return ErrPostgresPublicationNamesRequired
 	}
 
 	if c.Redis.Addr == "" {

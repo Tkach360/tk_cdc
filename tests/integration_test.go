@@ -30,6 +30,12 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+var (
+	ReplicationSlot  = "test_cdc_slot"
+	Plugin           = "pgoutput"
+	PublicationNames = "test_pub"
+)
+
 func TestCDC_CacheInvalidation(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -91,9 +97,10 @@ func TestCDC_CacheInvalidation(t *testing.T) {
 	// инициализация сервиса
 	cfg := config.Config{
 		Postgres: config.PostgresConfig{
-			DSN:             pgDSN,
-			ReplicationSlot: "test_cdc_slot",
-			Plugin:          "pgoutput",
+			DSN:              pgDSN,
+			ReplicationSlot:  ReplicationSlot,
+			Plugin:           Plugin,
+			PublicationNames: PublicationNames,
 		},
 		Redis: config.RedisConfig{
 			Addr: redisAddr,
@@ -159,15 +166,15 @@ func setupTestDB(ctx context.Context, t *testing.T, dsn string) {
 	requireNoErr(t, err, "create table")
 
 	// публикация (обязательно для pgoutput в PG 10+)
-	_, err = conn.Exec(ctx, `
-		CREATE PUBLICATION test_pub FOR ALL TABLES;
-	`)
+	_, err = conn.Exec(ctx, fmt.Sprintf(`
+		CREATE PUBLICATION %s FOR ALL TABLES;
+	`, PublicationNames))
 	requireNoErr(t, err, "create publication")
 
 	// создаю слот
-	_, err = conn.Exec(ctx, `
-		SELECT pg_create_logical_replication_slot('test_cdc_slot', 'pgoutput');
-	`)
+	_, err = conn.Exec(ctx, fmt.Sprintf(`
+		SELECT pg_create_logical_replication_slot('%s', '%s');
+	`, ReplicationSlot, Plugin))
 	// игнорирую ошибку "slot already exists" если тест запускается повторно
 	if err != nil && !isAlreadyExists(err) {
 		requireNoErr(t, err, "create replication slot")
@@ -184,7 +191,7 @@ func requireNoErr(t *testing.T, err error, msg string) {
 
 // проверка на ошибку "replication slot already exists"
 func isAlreadyExists(err error) bool {
-	return err != nil && (err.Error() == "ERROR: replication slot \"test_cdc_slot\" already exists (SQLSTATE 42710)")
+	return err != nil && (err.Error() == fmt.Sprintf("ERROR: replication slot \"%s\" already exists (SQLSTATE 42710)", ReplicationSlot))
 }
 
 func testUpdateInvalidation(ctx context.Context, t *testing.T, pgDSN, redisAddr string) {

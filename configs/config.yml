@@ -9,6 +9,9 @@ postgres:
   # плагин декодирования сообщений WAL, важно для формата сообщений
   plugin: "pgoutput"
 
+  # имя публикаций, которые отслеживаем через запятую
+  publication_names: "${PUBLICATION_NAMES:-test_pub}"
+
 redis:
   addr: "{REDIS_ADDR:-localhost:6379}"
   password: "${REDIS_PASSWORD:-}"

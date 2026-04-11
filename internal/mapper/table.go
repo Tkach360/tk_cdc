@@ -45,8 +45,6 @@ func parseTableString(s string) (schema, table string, err error) {
 	}
 
 	if separatorIdx == -1 {
-		// если нет разделителей, значит вся строка имя таблицы, а схема public
-		// TODO: тут нужно учитывать какая схема по умолчанию
 		return "", unquote(s), nil
 	}
 
@@ -56,9 +54,6 @@ func parseTableString(s string) (schema, table string, err error) {
 	schema = unquote(schemaPart)
 	table = unquote(tablePart)
 
-	// if schema == "" {
-	// 	return "", "", fmt.Errorf("empty schema name in %q", s)
-	// }
 	if table == "" {
 		return "", "", fmt.Errorf("empty table name in %q", s)
 	}

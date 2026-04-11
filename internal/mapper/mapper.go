@@ -103,18 +103,18 @@ func extractColumnName(keyPattern string) (string, error) {
 	end := strings.Index(keyPattern, "}")
 
 	if start == -1 {
-		return "", fmt.Errorf("missing opening brace '{'")
+		return "", fmt.Errorf("%w in pattern '%s'", ErrMissingOpeningBrace, keyPattern)
 	}
 	if end == -1 {
-		return "", fmt.Errorf("missing closing brace '}'")
+		return "", fmt.Errorf("%w in pattern '%s'", ErrMissingClosingBrace, keyPattern)
 	}
 	if end <= start {
-		return "", fmt.Errorf("closing brace appears before opening brace")
+		return "", fmt.Errorf("%w in pattern '%s'", ErrClosingBraceBeforeOpening, keyPattern)
 	}
 
 	columnName := keyPattern[start+1 : end]
 	if columnName == "" {
-		return "", fmt.Errorf("empty column name between braces")
+		return "", fmt.Errorf("%w in pattern '%s'", ErrEmptyColumnName, keyPattern)
 	}
 
 	return columnName, nil

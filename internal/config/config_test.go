@@ -2,10 +2,13 @@ package config
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/Tkach360/tk_cdc/internal/mapper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestConfigValidate(t *testing.T) {
@@ -200,6 +203,259 @@ func TestConfigValidate(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			err := tt.config.validate()
 			assert.True(t, tt.checkErr(err), "Expected error condition not met, got: %v", err)
+		})
+	}
+}
+
+func createTempConfig(t *testing.T, content string) string {
+	t.Helper()
+	tmpFile := filepath.Join(t.TempDir(), "config.yaml")
+	err := os.WriteFile(tmpFile, []byte(content), 0644)
+	require.NoError(t, err)
+	return tmpFile
+}
+
+func TestLoad(t *testing.T) {
+	tests := []struct {
+		name        string
+		yamlContent string
+		env         map[string]string
+		wantErr     bool
+		checkFunc   func(t *testing.T, cfg *Config)
+	}{
+		{
+			name: "valid config with default_schema and rule without schema",
+			yamlContent: `
+postgres:
+  dsn: "postgres://localhost:5432/db"
+  replication_slot: "slot1"
+  plugin: "pgoutput"
+redis:
+  addr: "localhost:6379"
+mapping:
+  default_schema: "custom"
+  rules:
+    - table: "users"
+      key_pattern: "user:{id}"
+`,
+			wantErr: false,
+			checkFunc: func(t *testing.T, cfg *Config) {
+				assert.Equal(t, "custom", cfg.Mapping.DefaultSchema)
+				require.Len(t, cfg.Mapping.Rules, 1)
+				rule := cfg.Mapping.Rules[0]
+				assert.Equal(t, "custom", rule.Table.Schema)
+				assert.Equal(t, "users", rule.Table.Name)
+				assert.Equal(t, "user:{id}", rule.KeyPattern)
+			},
+		},
+		{
+			name: "no default_schema - fallback to public",
+			yamlContent: `
+postgres:
+  dsn: "postgres://localhost:5432/db"
+  replication_slot: "slot1"
+  plugin: "pgoutput"
+redis:
+  addr: "localhost:6379"
+mapping:
+  rules:
+    - table: "orders"
+      key_pattern: "order:{id}"
+`,
+			wantErr: false,
+			checkFunc: func(t *testing.T, cfg *Config) {
+				assert.Equal(t, "public", cfg.Mapping.DefaultSchema)
+				rule := cfg.Mapping.Rules[0]
+				assert.Equal(t, "public", rule.Table.Schema)
+				assert.Equal(t, "orders", rule.Table.Name)
+			},
+		},
+		{
+			name: "explicit schema in table - no substitution",
+			yamlContent: `
+postgres:
+  dsn: "postgres://localhost:5432/db"
+  replication_slot: "slot1"
+  plugin: "pgoutput"
+redis:
+  addr: "localhost:6379"
+mapping:
+  default_schema: "custom"
+  rules:
+    - table: "explicit:users"
+      key_pattern: "user:{id}"
+`,
+			wantErr: false,
+			checkFunc: func(t *testing.T, cfg *Config) {
+				rule := cfg.Mapping.Rules[0]
+				assert.Equal(t, "explicit", rule.Table.Schema)
+				assert.Equal(t, "users", rule.Table.Name)
+			},
+		},
+		{
+			name: "empty schema in table (':table') - uses default_schema",
+			yamlContent: `
+postgres:
+  dsn: "postgres://localhost:5432/db"
+  replication_slot: "slot1"
+  plugin: "pgoutput"
+redis:
+  addr: "localhost:6379"
+mapping:
+  default_schema: "custom"
+  rules:
+    - table: ":temp"
+      key_pattern: "temp:{id}"
+`,
+			wantErr: false,
+			checkFunc: func(t *testing.T, cfg *Config) {
+				rule := cfg.Mapping.Rules[0]
+				assert.Equal(t, "custom", rule.Table.Schema)
+				assert.Equal(t, "temp", rule.Table.Name)
+			},
+		},
+		{
+			name: "missing required postgres.dsn",
+			yamlContent: `
+postgres:
+  replication_slot: "slot1"
+  plugin: "pgoutput"
+redis:
+  addr: "localhost:6379"
+mapping:
+  rules:
+    - table: "users"
+      key_pattern: "user:{id}"
+`,
+			wantErr: true,
+		},
+		{
+			name: "missing redis.addr",
+			yamlContent: `
+postgres:
+  dsn: "postgres://localhost:5432/db"
+  replication_slot: "slot1"
+  plugin: "pgoutput"
+redis:
+  db: 0
+mapping:
+  rules:
+    - table: "users"
+      key_pattern: "user:{id}"
+`,
+			wantErr: true,
+		},
+		{
+			name: "invalid plugin (not pgoutput)",
+			yamlContent: `
+postgres:
+  dsn: "postgres://localhost:5432/db"
+  replication_slot: "slot1"
+  plugin: "wal2json"
+redis:
+  addr: "localhost:6379"
+mapping:
+  rules:
+    - table: "users"
+      key_pattern: "user:{id}"
+`,
+			wantErr: true,
+		},
+		{
+			name: "empty table name in rule",
+			yamlContent: `
+postgres:
+  dsn: "postgres://localhost:5432/db"
+  replication_slot: "slot1"
+  plugin: "pgoutput"
+redis:
+  addr: "localhost:6379"
+mapping:
+  rules:
+    - table: ""
+      key_pattern: "user:{id}"
+`,
+			wantErr: true,
+		},
+		{
+			name: "empty key_pattern",
+			yamlContent: `
+postgres:
+  dsn: "postgres://localhost:5432/db"
+  replication_slot: "slot1"
+  plugin: "pgoutput"
+redis:
+  addr: "localhost:6379"
+mapping:
+  rules:
+    - table: "users"
+      key_pattern: ""
+`,
+			wantErr: true,
+		},
+		{
+			name: "key_pattern missing placeholder {}",
+			yamlContent: `
+postgres:
+  dsn: "postgres://localhost:5432/db"
+  replication_slot: "slot1"
+  plugin: "pgoutput"
+redis:
+  addr: "localhost:6379"
+mapping:
+  rules:
+    - table: "users"
+      key_pattern: "user:id"
+`,
+			wantErr: true,
+		},
+		{
+			name: "environment variable expansion",
+			yamlContent: `
+postgres:
+  dsn: "${POSTGRES_DSN}"
+  replication_slot: "${PG_SLOT}"
+  plugin: "pgoutput"
+redis:
+  addr: "${REDIS_ADDR}"
+mapping:
+  rules:
+    - table: "users"
+      key_pattern: "user:{id}"
+`,
+			env: map[string]string{
+				"POSTGRES_DSN": "postgres://test:pass@localhost:5432/testdb",
+				"PG_SLOT":      "test_slot",
+				"REDIS_ADDR":   "redis:6379",
+			},
+			wantErr: false,
+			checkFunc: func(t *testing.T, cfg *Config) {
+				assert.Equal(t, "postgres://test:pass@localhost:5432/testdb", cfg.Postgres.DSN)
+				assert.Equal(t, "test_slot", cfg.Postgres.ReplicationSlot)
+				assert.Equal(t, "redis:6379", cfg.Redis.Addr)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+
+			for k, v := range tt.env {
+				os.Setenv(k, v)
+				defer os.Unsetenv(k)
+			}
+
+			cfgPath := createTempConfig(t, tt.yamlContent)
+			cfg, err := Load(cfgPath)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			assert.NoError(t, err)
+			if tt.checkFunc != nil {
+				tt.checkFunc(t, cfg)
+			}
 		})
 	}
 }

@@ -98,8 +98,11 @@ func TestCDC_CacheInvalidation(t *testing.T) {
 		Redis: config.RedisConfig{
 			Addr: redisAddr,
 		},
-		Mapping: []mapper.MappingRule{
-			{Table: mapper.Table{Schema: "public", Name: "users"}, KeyPattern: "user:{id}"},
+		Mapping: mapper.MappingConfig{
+			DefaultSchema: "public",
+			Rules: []mapper.MappingRule{
+				{Table: mapper.Table{Schema: "public", Name: "users"}, KeyPattern: "user:{id}"},
+			},
 		},
 	}
 

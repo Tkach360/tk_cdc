@@ -27,10 +27,10 @@ type MappingRule struct {
 	KeyPattern string `yaml:"key_pattern"`
 }
 
-func New(rules []MappingRule) *Mapper {
+func New(cfg *MappingConfig) *Mapper {
 
 	mrules := make(map[string]MappingRule)
-	for _, rule := range rules {
+	for _, rule := range cfg.Rules {
 		mrules[rule.Table.QualifiedName()] = rule
 	}
 

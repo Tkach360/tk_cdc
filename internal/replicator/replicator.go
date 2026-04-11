@@ -44,7 +44,7 @@ func New(cfg *config.Config) (*Replicator, error) {
 		cfg:         cfg,
 		pgConfig:    pgConfig,
 		invalidator: invalidator,
-		mapper:      mapper.New(cfg.Mapping),
+		mapper:      mapper.New(&cfg.Mapping),
 		slotName:    cfg.Postgres.ReplicationSlot,
 		plugin:      cfg.Postgres.Plugin,
 	}, nil

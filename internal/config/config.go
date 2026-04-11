@@ -15,7 +15,7 @@ import (
 type Config struct {
 	Postgres PostgresConfig       `yaml:"postgres"`
 	Redis    RedisConfig          `yaml:"redis"`
-	Mapping  []mapper.MappingRule `yaml:"mapping"`
+	Mapping  mapper.MappingConfig `yaml:"mapping"`
 }
 
 type PostgresConfig struct {
@@ -65,7 +65,7 @@ func (c *Config) validate() error {
 		return ErrRedisAddrRequired
 	}
 
-	for i, rule := range c.Mapping {
+	for i, rule := range c.Mapping.Rules {
 		if rule.Table.Name == "" {
 			return &MappingError{i, ErrMappingTableRequired}
 		}

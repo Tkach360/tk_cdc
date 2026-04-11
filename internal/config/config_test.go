@@ -90,10 +90,13 @@ func TestConfigValidate(t *testing.T) {
 				Redis: RedisConfig{
 					Addr: "localhost:6379",
 				},
-				Mapping: []mapper.MappingRule{
-					{
-						Table:      mapper.Table{Name: ""},
-						KeyPattern: "user:{id}",
+				Mapping: mapper.MappingConfig{
+					DefaultSchema: "public",
+					Rules: []mapper.MappingRule{
+						{
+							Table:      mapper.Table{Name: ""},
+							KeyPattern: "user:{id}",
+						},
 					},
 				},
 			},
@@ -119,10 +122,13 @@ func TestConfigValidate(t *testing.T) {
 				Redis: RedisConfig{
 					Addr: "localhost:6379",
 				},
-				Mapping: []mapper.MappingRule{
-					{
-						Table:      mapper.Table{Name: "users"},
-						KeyPattern: "",
+				Mapping: mapper.MappingConfig{
+					DefaultSchema: "public",
+					Rules: []mapper.MappingRule{
+						{
+							Table:      mapper.Table{Name: "users"},
+							KeyPattern: "",
+						},
 					},
 				},
 			},
@@ -145,10 +151,13 @@ func TestConfigValidate(t *testing.T) {
 				Redis: RedisConfig{
 					Addr: "localhost:6379",
 				},
-				Mapping: []mapper.MappingRule{
-					{
-						Table:      mapper.Table{Name: "users"},
-						KeyPattern: "static_key",
+				Mapping: mapper.MappingConfig{
+					DefaultSchema: "public",
+					Rules: []mapper.MappingRule{
+						{
+							Table:      mapper.Table{Name: "users"},
+							KeyPattern: "static_key",
+						},
 					},
 				},
 			},
@@ -171,10 +180,13 @@ func TestConfigValidate(t *testing.T) {
 				Redis: RedisConfig{
 					Addr: "localhost:6379",
 				},
-				Mapping: []mapper.MappingRule{
-					{
-						Table:      mapper.Table{Name: "users"},
-						KeyPattern: "user:{id}",
+				Mapping: mapper.MappingConfig{
+					DefaultSchema: "public",
+					Rules: []mapper.MappingRule{
+						{
+							Table:      mapper.Table{Name: "users"},
+							KeyPattern: "user:{id}",
+						},
 					},
 				},
 			},

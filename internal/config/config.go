@@ -19,10 +19,27 @@ type Config struct {
 }
 
 type PostgresConfig struct {
-	DSN              string `yaml:"dsn"`
+	Addr string `yaml:"addr"`
+	DB   string `yaml:"db"`
+
+	ReplicationUser string `yaml:"replication_user"`
+	ReplicationPass string `yaml:"replication_pass"`
+
+	AppUser string `yaml:"app_user"`
+	AppPass string `yaml:"app_pass"`
+
+	// DSN              string `yaml:"dsn"`
 	ReplicationSlot  string `yaml:"replication_slot"`
 	Plugin           string `yaml:"plugin"`
-	PublicationNames string `yaml:"publication_names"` // добавил
+	PublicationNames string `yaml:"publication_names"`
+}
+
+func (p *PostgresConfig) AppDSN() string {
+	return fmt.Sprintf("postgres://%s:%s@%s/%s", p.AppUser, p.AppPass, p.Addr, p.DB)
+}
+
+func (p *PostgresConfig) ReplicationDSN() string {
+	return fmt.Sprintf("postgres://%s:%s@%s/%s", p.AppUser, p.AppPass, p.Addr, p.DB)
 }
 
 type RedisConfig struct {
@@ -51,23 +68,36 @@ func Load(path string) (*Config, error) {
 	return &cfg, nil
 }
 
+func (c *Config) Validate() error {
+	return c.validate()
+}
+
 func (c *Config) validate() error {
-	if c.Postgres.DSN == "" {
-		return ErrPostgresDSNRequired
+	if c.Postgres.Addr == "" {
+		return &RequiredError{"postgres.addr"}
+	}
+	if c.Postgres.DB == "" {
+		return &RequiredError{"postgres.db"}
+	}
+	if c.Postgres.ReplicationUser == "" {
+		return &RequiredError{"postgres.replication_user"}
+	}
+	if c.Postgres.AppUser == "" {
+		return &RequiredError{"postgres.app_user"}
 	}
 	if c.Postgres.ReplicationSlot == "" {
-		return ErrPostgresReplicationSlotRequired
+		return &RequiredError{"postgres.replication_slot"}
 	}
 	if c.Postgres.Plugin != "pgoutput" {
 		return ErrPostgresPluginUnsupported
 	}
 
 	if c.Postgres.PublicationNames == "" {
-		return ErrPostgresPublicationNamesRequired
+		return &RequiredError{"postgres.publication_names"}
 	}
 
 	if c.Redis.Addr == "" {
-		return ErrRedisAddrRequired
+		return &RequiredError{"redis.addr"}
 	}
 
 	for i, rule := range c.Mapping.Rules {

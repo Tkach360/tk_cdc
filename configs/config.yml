@@ -1,6 +1,16 @@
 postgres:
+  addr: "${DB_ADDR:-localhost:5432}"
+  db: "${DB:-demo}"
+
   # Data Source Name - строка подключения к БД
-  dsn: "${POSTGRES_DSN:-postgres://app:secret@localhost:5432/demo}"
+  # dsn: "${POSTGRES_DSN:-postgres://app:secret@localhost:5432/demo}"
+  # пользователь для чтения репликации
+  replication_user: "${TKCDC_REPLICATION_USER:-tkcdc_replication_user}"
+  replication_pass: "${TKCDC_REPLICATION_PASS:-tkcdc_replication_pass}"
+
+  # отдельный полльзователь для выполнения операций проверки наличия слота и получения LSN
+  app_user: "${TKCDC_USER:-tkcdc_user}"
+  app_pass: "${TKCDC_PASS:-tkcdc_pass}"
 
   # имя слота логической репликации
   # если слот не существует - сервис попытается создать его при старте

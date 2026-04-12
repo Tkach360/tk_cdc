@@ -19,10 +19,15 @@ func TestConfigValidate(t *testing.T) {
 		checkErr    func(error) bool
 	}{
 		{
-			name: "missing postgres dsn",
+			name: "missing postgres addr",
 			config: &Config{
 				Postgres: PostgresConfig{
-					DSN:              "",
+					Addr:             "",
+					DB:               "testdb",
+					ReplicationUser:  "repl_user",
+					ReplicationPass:  "repl_pass",
+					AppUser:          "app_user",
+					AppPass:          "app_pass",
 					ReplicationSlot:  "test_slot",
 					Plugin:           "pgoutput",
 					PublicationNames: "",
@@ -32,14 +37,135 @@ func TestConfigValidate(t *testing.T) {
 				},
 			},
 			checkErr: func(err error) bool {
-				return errors.Is(err, ErrPostgresDSNRequired)
+				var e *RequiredError
+				return errors.As(err, &e)
+			},
+		},
+		{
+			name: "missing postgres db",
+			config: &Config{
+				Postgres: PostgresConfig{
+					Addr:             "localhost:5432",
+					DB:               "",
+					ReplicationUser:  "repl_user",
+					ReplicationPass:  "repl_pass",
+					AppUser:          "app_user",
+					AppPass:          "app_pass",
+					ReplicationSlot:  "test_slot",
+					Plugin:           "pgoutput",
+					PublicationNames: "",
+				},
+				Redis: RedisConfig{
+					Addr: "localhost:6379",
+				},
+			},
+			checkErr: func(err error) bool {
+				var e *RequiredError
+				return errors.As(err, &e)
+			},
+		},
+		{
+			name: "missing replication user",
+			config: &Config{
+				Postgres: PostgresConfig{
+					Addr:             "localhost:5432",
+					DB:               "testdb",
+					ReplicationUser:  "",
+					ReplicationPass:  "repl_pass",
+					AppUser:          "app_user",
+					AppPass:          "app_pass",
+					ReplicationSlot:  "test_slot",
+					Plugin:           "pgoutput",
+					PublicationNames: "",
+				},
+				Redis: RedisConfig{
+					Addr: "localhost:6379",
+				},
+			},
+			checkErr: func(err error) bool {
+				var e *RequiredError
+				return errors.As(err, &e)
+			},
+		},
+		{
+			name: "missing replication password",
+			config: &Config{
+				Postgres: PostgresConfig{
+					Addr:             "localhost:5432",
+					DB:               "testdb",
+					ReplicationUser:  "repl_user",
+					ReplicationPass:  "",
+					AppUser:          "app_user",
+					AppPass:          "app_pass",
+					ReplicationSlot:  "test_slot",
+					Plugin:           "pgoutput",
+					PublicationNames: "",
+				},
+				Redis: RedisConfig{
+					Addr: "localhost:6379",
+				},
+			},
+			checkErr: func(err error) bool {
+				var e *RequiredError
+				return errors.As(err, &e)
+			},
+		},
+		{
+			name: "missing app user",
+			config: &Config{
+				Postgres: PostgresConfig{
+					Addr:             "localhost:5432",
+					DB:               "testdb",
+					ReplicationUser:  "repl_user",
+					ReplicationPass:  "repl_pass",
+					AppUser:          "",
+					AppPass:          "app_pass",
+					ReplicationSlot:  "test_slot",
+					Plugin:           "pgoutput",
+					PublicationNames: "",
+				},
+				Redis: RedisConfig{
+					Addr: "localhost:6379",
+				},
+			},
+			checkErr: func(err error) bool {
+				var e *RequiredError
+				return errors.As(err, &e)
+			},
+		},
+		{
+			name: "missing app password",
+			config: &Config{
+				Postgres: PostgresConfig{
+					Addr:             "localhost:5432",
+					DB:               "testdb",
+					ReplicationUser:  "repl_user",
+					ReplicationPass:  "repl_pass",
+					AppUser:          "app_user",
+					AppPass:          "",
+					ReplicationSlot:  "test_slot",
+					Plugin:           "pgoutput",
+					PublicationNames: "",
+				},
+				Redis: RedisConfig{
+					Addr: "localhost:6379",
+				},
+			},
+			checkErr: func(err error) bool {
+				var e *RequiredError
+				return errors.As(err, &e)
 			},
 		},
 		{
 			name: "missing replication slot",
 			config: &Config{
 				Postgres: PostgresConfig{
-					DSN:              "postgres://localhost:5432/db",
+					Addr:             "localhost:5432",
+					DB:               "testdb",
+					ReplicationUser:  "repl_user",
+					ReplicationPass:  "repl_pass",
+					AppUser:          "app_user",
+					AppPass:          "app_pass",
 					ReplicationSlot:  "",
 					Plugin:           "pgoutput",
 					PublicationNames: "",
@@ -49,14 +175,20 @@ func TestConfigValidate(t *testing.T) {
 				},
 			},
 			checkErr: func(err error) bool {
-				return errors.Is(err, ErrPostgresReplicationSlotRequired)
+				var e *RequiredError
+				return errors.As(err, &e)
 			},
 		},
 		{
 			name: "unsupported plugin",
 			config: &Config{
 				Postgres: PostgresConfig{
-					DSN:              "postgres://localhost:5432/db",
+					Addr:             "localhost:5432",
+					DB:               "testdb",
+					ReplicationUser:  "repl_user",
+					ReplicationPass:  "repl_pass",
+					AppUser:          "app_user",
+					AppPass:          "app_pass",
 					ReplicationSlot:  "test_slot",
 					Plugin:           "wal2json",
 					PublicationNames: "",
@@ -73,7 +205,12 @@ func TestConfigValidate(t *testing.T) {
 			name: "missing redis addr",
 			config: &Config{
 				Postgres: PostgresConfig{
-					DSN:              "postgres://localhost:5432/db",
+					Addr:             "localhost:5432",
+					DB:               "testdb",
+					ReplicationUser:  "repl_user",
+					ReplicationPass:  "repl_pass",
+					AppUser:          "app_user",
+					AppPass:          "app_pass",
 					ReplicationSlot:  "test_slot",
 					Plugin:           "pgoutput",
 					PublicationNames: "my_publication",
@@ -83,14 +220,20 @@ func TestConfigValidate(t *testing.T) {
 				},
 			},
 			checkErr: func(err error) bool {
-				return errors.Is(err, ErrRedisAddrRequired)
+				var e *RequiredError
+				return errors.As(err, &e)
 			},
 		},
 		{
 			name: "missing publication names with pgoutput",
 			config: &Config{
 				Postgres: PostgresConfig{
-					DSN:              "postgres://localhost:5432/db",
+					Addr:             "localhost:5432",
+					DB:               "testdb",
+					ReplicationUser:  "repl_user",
+					ReplicationPass:  "repl_pass",
+					AppUser:          "app_user",
+					AppPass:          "app_pass",
 					ReplicationSlot:  "test_slot",
 					Plugin:           "pgoutput",
 					PublicationNames: "",
@@ -100,14 +243,20 @@ func TestConfigValidate(t *testing.T) {
 				},
 			},
 			checkErr: func(err error) bool {
-				return errors.Is(err, ErrPostgresPublicationNamesRequired)
+				var e *RequiredError
+				return errors.As(err, &e)
 			},
 		},
 		{
 			name: "missing table name in mapping",
 			config: &Config{
 				Postgres: PostgresConfig{
-					DSN:              "postgres://localhost:5432/db",
+					Addr:             "localhost:5432",
+					DB:               "testdb",
+					ReplicationUser:  "repl_user",
+					ReplicationPass:  "repl_pass",
+					AppUser:          "app_user",
+					AppPass:          "app_pass",
 					ReplicationSlot:  "test_slot",
 					Plugin:           "pgoutput",
 					PublicationNames: "my_publication",
@@ -140,7 +289,12 @@ func TestConfigValidate(t *testing.T) {
 			name: "missing key pattern",
 			config: &Config{
 				Postgres: PostgresConfig{
-					DSN:              "postgres://localhost:5432/db",
+					Addr:             "localhost:5432",
+					DB:               "testdb",
+					ReplicationUser:  "repl_user",
+					ReplicationPass:  "repl_pass",
+					AppUser:          "app_user",
+					AppPass:          "app_pass",
 					ReplicationSlot:  "test_slot",
 					Plugin:           "pgoutput",
 					PublicationNames: "my_publication",
@@ -170,7 +324,12 @@ func TestConfigValidate(t *testing.T) {
 			name: "key pattern without placeholder",
 			config: &Config{
 				Postgres: PostgresConfig{
-					DSN:              "postgres://localhost:5432/db",
+					Addr:             "localhost:5432",
+					DB:               "testdb",
+					ReplicationUser:  "repl_user",
+					ReplicationPass:  "repl_pass",
+					AppUser:          "app_user",
+					AppPass:          "app_pass",
 					ReplicationSlot:  "test_slot",
 					Plugin:           "pgoutput",
 					PublicationNames: "my_publication",
@@ -200,7 +359,12 @@ func TestConfigValidate(t *testing.T) {
 			name: "valid config",
 			config: &Config{
 				Postgres: PostgresConfig{
-					DSN:              "postgres://localhost:5432/db",
+					Addr:             "localhost:5432",
+					DB:               "testdb",
+					ReplicationUser:  "repl_user",
+					ReplicationPass:  "repl_pass",
+					AppUser:          "app_user",
+					AppPass:          "app_pass",
 					ReplicationSlot:  "test_slot",
 					Plugin:           "pgoutput",
 					PublicationNames: "my_publication",
@@ -226,7 +390,12 @@ func TestConfigValidate(t *testing.T) {
 			name: "valid config with multiple publications",
 			config: &Config{
 				Postgres: PostgresConfig{
-					DSN:              "postgres://localhost:5432/db",
+					Addr:             "localhost:5432",
+					DB:               "testdb",
+					ReplicationUser:  "repl_user",
+					ReplicationPass:  "repl_pass",
+					AppUser:          "app_user",
+					AppPass:          "app_pass",
 					ReplicationSlot:  "test_slot",
 					Plugin:           "pgoutput",
 					PublicationNames: "pub1,pub2,pub3",
@@ -278,7 +447,12 @@ func TestLoad(t *testing.T) {
 			name: "valid config with default_schema and rule without schema",
 			yamlContent: `
 postgres:
-  dsn: "postgres://localhost:5432/db"
+  addr: "localhost:5432"
+  db: "testdb"
+  replication_user: "repl_user"
+  replication_pass: "repl_pass"
+  app_user: "app_user"
+  app_pass: "app_pass"
   replication_slot: "slot1"
   plugin: "pgoutput"
   publication_names: "my_pub"
@@ -292,6 +466,12 @@ mapping:
 `,
 			wantErr: false,
 			checkFunc: func(t *testing.T, cfg *Config) {
+				assert.Equal(t, "localhost:5432", cfg.Postgres.Addr)
+				assert.Equal(t, "testdb", cfg.Postgres.DB)
+				assert.Equal(t, "repl_user", cfg.Postgres.ReplicationUser)
+				assert.Equal(t, "repl_pass", cfg.Postgres.ReplicationPass)
+				assert.Equal(t, "app_user", cfg.Postgres.AppUser)
+				assert.Equal(t, "app_pass", cfg.Postgres.AppPass)
 				assert.Equal(t, "custom", cfg.Mapping.DefaultSchema)
 				require.Len(t, cfg.Mapping.Rules, 1)
 				rule := cfg.Mapping.Rules[0]
@@ -305,7 +485,12 @@ mapping:
 			name: "no default_schema - fallback to public",
 			yamlContent: `
 postgres:
-  dsn: "postgres://localhost:5432/db"
+  addr: "localhost:5432"
+  db: "testdb"
+  replication_user: "repl_user"
+  replication_pass: "repl_pass"
+  app_user: "app_user"
+  app_pass: "app_pass"
   replication_slot: "slot1"
   plugin: "pgoutput"
   publication_names: "orders_pub"
@@ -329,7 +514,12 @@ mapping:
 			name: "explicit schema in table - no substitution",
 			yamlContent: `
 postgres:
-  dsn: "postgres://localhost:5432/db"
+  addr: "localhost:5432"
+  db: "testdb"
+  replication_user: "repl_user"
+  replication_pass: "repl_pass"
+  app_user: "app_user"
+  app_pass: "app_pass"
   replication_slot: "slot1"
   plugin: "pgoutput"
   publication_names: "test_pub"
@@ -353,7 +543,12 @@ mapping:
 			name: "empty schema in table ('.table') - uses default_schema",
 			yamlContent: `
 postgres:
-  dsn: "postgres://localhost:5432/db"
+  addr: "localhost:5432"
+  db: "testdb"
+  replication_user: "repl_user"
+  replication_pass: "repl_pass"
+  app_user: "app_user"
+  app_pass: "app_pass"
   replication_slot: "slot1"
   plugin: "pgoutput"
   publication_names: "temp_pub"
@@ -374,9 +569,56 @@ mapping:
 			},
 		},
 		{
-			name: "missing required postgres.dsn",
+			name: "missing required postgres addr",
 			yamlContent: `
 postgres:
+  db: "testdb"
+  replication_user: "repl_user"
+  replication_pass: "repl_pass"
+  app_user: "app_user"
+  app_pass: "app_pass"
+  replication_slot: "slot1"
+  plugin: "pgoutput"
+  publication_names: "my_pub"
+redis:
+  addr: "localhost:6379"
+mapping:
+  rules:
+    - table: "users"
+      key_pattern: "user:{id}"
+`,
+			wantErr: true,
+		},
+		{
+			name: "missing required postgres db",
+			yamlContent: `
+postgres:
+  addr: "localhost:5432"
+  replication_user: "repl_user"
+  replication_pass: "repl_pass"
+  app_user: "app_user"
+  app_pass: "app_pass"
+  replication_slot: "slot1"
+  plugin: "pgoutput"
+  publication_names: "my_pub"
+redis:
+  addr: "localhost:6379"
+mapping:
+  rules:
+    - table: "users"
+      key_pattern: "user:{id}"
+`,
+			wantErr: true,
+		},
+		{
+			name: "missing replication_user",
+			yamlContent: `
+postgres:
+  addr: "localhost:5432"
+  db: "testdb"
+  replication_pass: "repl_pass"
+  app_user: "app_user"
+  app_pass: "app_pass"
   replication_slot: "slot1"
   plugin: "pgoutput"
   publication_names: "my_pub"
@@ -393,7 +635,12 @@ mapping:
 			name: "missing redis.addr",
 			yamlContent: `
 postgres:
-  dsn: "postgres://localhost:5432/db"
+  addr: "localhost:5432"
+  db: "testdb"
+  replication_user: "repl_user"
+  replication_pass: "repl_pass"
+  app_user: "app_user"
+  app_pass: "app_pass"
   replication_slot: "slot1"
   plugin: "pgoutput"
   publication_names: "my_pub"
@@ -410,7 +657,12 @@ mapping:
 			name: "invalid plugin (not pgoutput)",
 			yamlContent: `
 postgres:
-  dsn: "postgres://localhost:5432/db"
+  addr: "localhost:5432"
+  db: "testdb"
+  replication_user: "repl_user"
+  replication_pass: "repl_pass"
+  app_user: "app_user"
+  app_pass: "app_pass"
   replication_slot: "slot1"
   plugin: "wal2json"
   publication_names: "my_pub"
@@ -427,7 +679,12 @@ mapping:
 			name: "missing publication_names with pgoutput",
 			yamlContent: `
 postgres:
-  dsn: "postgres://localhost:5432/db"
+  addr: "localhost:5432"
+  db: "testdb"
+  replication_user: "repl_user"
+  replication_pass: "repl_pass"
+  app_user: "app_user"
+  app_pass: "app_pass"
   replication_slot: "slot1"
   plugin: "pgoutput"
 redis:
@@ -443,7 +700,12 @@ mapping:
 			name: "empty table name in rule",
 			yamlContent: `
 postgres:
-  dsn: "postgres://localhost:5432/db"
+  addr: "localhost:5432"
+  db: "testdb"
+  replication_user: "repl_user"
+  replication_pass: "repl_pass"
+  app_user: "app_user"
+  app_pass: "app_pass"
   replication_slot: "slot1"
   plugin: "pgoutput"
   publication_names: "my_pub"
@@ -460,7 +722,12 @@ mapping:
 			name: "empty key_pattern",
 			yamlContent: `
 postgres:
-  dsn: "postgres://localhost:5432/db"
+  addr: "localhost:5432"
+  db: "testdb"
+  replication_user: "repl_user"
+  replication_pass: "repl_pass"
+  app_user: "app_user"
+  app_pass: "app_pass"
   replication_slot: "slot1"
   plugin: "pgoutput"
   publication_names: "my_pub"
@@ -477,7 +744,12 @@ mapping:
 			name: "key_pattern missing placeholder {}",
 			yamlContent: `
 postgres:
-  dsn: "postgres://localhost:5432/db"
+  addr: "localhost:5432"
+  db: "testdb"
+  replication_user: "repl_user"
+  replication_pass: "repl_pass"
+  app_user: "app_user"
+  app_pass: "app_pass"
   replication_slot: "slot1"
   plugin: "pgoutput"
   publication_names: "my_pub"
@@ -494,7 +766,12 @@ mapping:
 			name: "environment variable expansion",
 			yamlContent: `
 postgres:
-  dsn: "${POSTGRES_DSN}"
+  addr: "${POSTGRES_ADDR}"
+  db: "${POSTGRES_DB}"
+  replication_user: "${PG_REPL_USER}"
+  replication_pass: "${PG_REPL_PASS}"
+  app_user: "${PG_APP_USER}"
+  app_pass: "${PG_APP_PASS}"
   replication_slot: "${PG_SLOT}"
   plugin: "pgoutput"
   publication_names: "${PG_PUBLICATIONS}"
@@ -506,14 +783,24 @@ mapping:
       key_pattern: "user:{id}"
 `,
 			env: map[string]string{
-				"POSTGRES_DSN":    "postgres://test:pass@localhost:5432/testdb",
+				"POSTGRES_ADDR":   "localhost:5432",
+				"POSTGRES_DB":     "testdb",
+				"PG_REPL_USER":    "repl_user",
+				"PG_REPL_PASS":    "repl_pass",
+				"PG_APP_USER":     "app_user",
+				"PG_APP_PASS":     "app_pass",
 				"PG_SLOT":         "test_slot",
 				"REDIS_ADDR":      "redis:6379",
 				"PG_PUBLICATIONS": "env_pub1,env_pub2",
 			},
 			wantErr: false,
 			checkFunc: func(t *testing.T, cfg *Config) {
-				assert.Equal(t, "postgres://test:pass@localhost:5432/testdb", cfg.Postgres.DSN)
+				assert.Equal(t, "localhost:5432", cfg.Postgres.Addr)
+				assert.Equal(t, "testdb", cfg.Postgres.DB)
+				assert.Equal(t, "repl_user", cfg.Postgres.ReplicationUser)
+				assert.Equal(t, "repl_pass", cfg.Postgres.ReplicationPass)
+				assert.Equal(t, "app_user", cfg.Postgres.AppUser)
+				assert.Equal(t, "app_pass", cfg.Postgres.AppPass)
 				assert.Equal(t, "test_slot", cfg.Postgres.ReplicationSlot)
 				assert.Equal(t, "redis:6379", cfg.Redis.Addr)
 				assert.Equal(t, "env_pub1,env_pub2", cfg.Postgres.PublicationNames)
@@ -523,7 +810,12 @@ mapping:
 			name: "multiple rules with mixed schema definitions",
 			yamlContent: `
 postgres:
-  dsn: "postgres://localhost:5432/db"
+  addr: "localhost:5432"
+  db: "testdb"
+  replication_user: "repl_user"
+  replication_pass: "repl_pass"
+  app_user: "app_user"
+  app_pass: "app_pass"
   replication_slot: "slot1"
   plugin: "pgoutput"
   publication_names: "multi_pub"
@@ -569,7 +861,12 @@ mapping:
 			name: "no rules defined",
 			yamlContent: `
 postgres:
-  dsn: "postgres://localhost:5432/db"
+  addr: "localhost:5432"
+  db: "testdb"
+  replication_user: "repl_user"
+  replication_pass: "repl_pass"
+  app_user: "app_user"
+  app_pass: "app_pass"
   replication_slot: "slot1"
   plugin: "pgoutput"
   publication_names: "empty_rules_pub"
@@ -590,7 +887,12 @@ mapping:
 			name: "no rules and no default_schema",
 			yamlContent: `
 postgres:
-  dsn: "postgres://localhost:5432/db"
+  addr: "localhost:5432"
+  db: "testdb"
+  replication_user: "repl_user"
+  replication_pass: "repl_pass"
+  app_user: "app_user"
+  app_pass: "app_pass"
   replication_slot: "slot1"
   plugin: "pgoutput"
   publication_names: "minimal_pub"

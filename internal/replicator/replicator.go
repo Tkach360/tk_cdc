@@ -20,7 +20,8 @@ import (
 
 type Replicator struct {
 	cfg         *config.Config
-	pgConfig    *pgx.ConnConfig
+	repConfig   *pgx.ConnConfig
+	appConfig   *pgx.ConnConfig
 	invalidator *invalidator.Invalidator
 	mapper      *mapper.Mapper
 	slotName    string
@@ -29,11 +30,16 @@ type Replicator struct {
 
 func New(cfg *config.Config) (*Replicator, error) {
 
-	pgConfig, err := pgx.ParseConfig(cfg.Postgres.DSN)
+	repConfig, err := pgx.ParseConfig(cfg.Postgres.ReplicationDSN())
 	if err != nil {
-		return nil, fmt.Errorf("parse postgres DSN: %w", err)
+		return nil, fmt.Errorf("parse replication postgres DSN: %w", err)
 	}
-	pgConfig.RuntimeParams["replication"] = "database" // нужно вынести в конфиг
+	repConfig.RuntimeParams["replication"] = "database" // нужно вынести в конфиг
+
+	appConfig, err := pgx.ParseConfig(cfg.Postgres.AppDSN())
+	if err != nil {
+		return nil, fmt.Errorf("parse app postgres DSN: %w", err)
+	}
 
 	invalidator, err := invalidator.New(&cfg.Redis)
 	if err != nil {
@@ -42,7 +48,8 @@ func New(cfg *config.Config) (*Replicator, error) {
 
 	return &Replicator{
 		cfg:         cfg,
-		pgConfig:    pgConfig,
+		repConfig:   repConfig,
+		appConfig:   appConfig,
 		invalidator: invalidator,
 		mapper:      mapper.New(&cfg.Mapping),
 		slotName:    cfg.Postgres.ReplicationSlot,
@@ -54,9 +61,9 @@ func New(cfg *config.Config) (*Replicator, error) {
 // - читает WAL
 // - обновляет кеш
 func (r *Replicator) Run(ctx context.Context) error {
-	slog.Info("connecting to postgres", "dsn", r.cfg.Postgres.DSN)
+	slog.Info("connecting to postgres", "dsn", r.cfg.Postgres.ReplicationDSN())
 
-	conn, err := pgx.ConnectConfig(ctx, r.pgConfig)
+	conn, err := pgx.ConnectConfig(ctx, r.repConfig)
 	if err != nil {
 		return fmt.Errorf("connection postgres: %w", err)
 	}
@@ -65,6 +72,7 @@ func (r *Replicator) Run(ctx context.Context) error {
 	if err := r.ensureReplicationSlot(ctx); err != nil {
 		return fmt.Errorf("ensure replication slot: %w", err)
 	}
+	slog.Info("ensure replication slot")
 
 	startLSN, err := r.getRestartLSN(ctx)
 	if err != nil {
@@ -170,10 +178,7 @@ func (r *Replicator) Run(ctx context.Context) error {
 
 // выполнить операцию с созданием нового, нерепликационного соединения с БД
 func (r *Replicator) withAdminConnection(ctx context.Context, fn func(context.Context, *pgx.Conn) error) error {
-	admCfg := r.pgConfig.Copy()
-	delete(admCfg.RuntimeParams, "replication")
-
-	conn, err := pgx.ConnectConfig(ctx, admCfg)
+	conn, err := pgx.ConnectConfig(ctx, r.appConfig)
 	if err != nil {
 		return fmt.Errorf("admin connect: %w", err)
 	}

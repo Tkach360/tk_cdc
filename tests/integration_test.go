@@ -31,11 +31,18 @@ func TestMain(m *testing.M) {
 }
 
 var (
+	PostgresPort     = "5432"
 	ReplicationSlot  = "test_cdc_slot"
 	Plugin           = "pgoutput"
 	PublicationNames = "test_pub"
 	PostgresPassword = "testsecret"
 	DB               = "testdb"
+
+	ReplicationUser = "tk_cdc_replication"
+	ReplicationPass = "tk_cdc_replication_secret"
+
+	AppUser = "tk_cdc_app"
+	AppPass = "tk_cdc_app_secret"
 
 	TkCDCPassword = "tk_cdc_secret"
 	TkCDCUser     = "tk_cdc_user"
@@ -49,7 +56,7 @@ func TestCDC_CacheInvalidation(t *testing.T) {
 	pgReq := testcontainers.ContainerRequest{
 		// TODO: может вынести параметры конфигураций куда-нибудь?
 		Image:        "postgres:16-alpine",
-		ExposedPorts: []string{"5432/tcp"},
+		ExposedPorts: []string{PostgresPort + "/tcp"},
 		Env: map[string]string{
 			//"POSTGRES_USER":     "testuser",
 			"POSTGRES_PASSWORD": PostgresPassword,
@@ -76,7 +83,8 @@ func TestCDC_CacheInvalidation(t *testing.T) {
 
 	pgHost, _ := pgContainer.Host(ctx)
 	pgPort, _ := pgContainer.MappedPort(ctx, "5432")
-	adminDSN := fmt.Sprintf("postgres://postgres:%s@%s:%s/%s?sslmode=disable", PostgresPassword, pgHost, pgPort.Port(), DB)
+	pgAddr := fmt.Sprintf("%s:%s", pgHost, pgPort.Port())
+	adminDSN := fmt.Sprintf("postgres://postgres:%s@%s/%s?sslmode=disable", PostgresPassword, pgAddr, DB)
 
 	// запускаем Redis
 	redisReq := testcontainers.ContainerRequest{
@@ -100,12 +108,16 @@ func TestCDC_CacheInvalidation(t *testing.T) {
 
 	setupTestDB(ctx, t, adminDSN)
 
-	testDSN := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable", TkCDCUser, TkCDCPassword, pgHost, pgPort.Port(), DB)
-
 	// инициализация сервиса
+	// TODO: нужно сделать чтение конфига из файла
 	cfg := config.Config{
 		Postgres: config.PostgresConfig{
-			DSN:              testDSN,
+			Addr:             pgAddr,
+			DB:               DB,
+			ReplicationUser:  ReplicationUser,
+			ReplicationPass:  ReplicationPass,
+			AppUser:          AppUser,
+			AppPass:          AppPass,
 			ReplicationSlot:  ReplicationSlot,
 			Plugin:           Plugin,
 			PublicationNames: PublicationNames,
@@ -121,6 +133,10 @@ func TestCDC_CacheInvalidation(t *testing.T) {
 		},
 	}
 
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("incorrect test config: %v", err)
+	}
+
 	rep, err := replicator.New(&cfg)
 	if err != nil {
 		t.Fatalf("replicator init failed: %v", err)
@@ -128,12 +144,12 @@ func TestCDC_CacheInvalidation(t *testing.T) {
 
 	// запуск репликатора в фоне
 	repCtx, repCancel := context.WithCancel(ctx)
-	defer repCancel()
 
 	repErrCh := make(chan error, 1)
 	go func() {
 		repErrCh <- rep.Run(repCtx)
 	}()
+	defer repCancel()
 
 	// TODO: стоит ли давать сервису некоторое время для подключения?
 	time.Sleep(2 * time.Second)
@@ -163,16 +179,33 @@ func setupTestDB(ctx context.Context, t *testing.T, dsn string) {
 	}
 	defer conn.Close(ctx)
 
-	// создаю тестовую таблицу
+	// создание пользователя для репликации
 	_, err = conn.Exec(ctx, fmt.Sprintf(`
-		CREATE ROLE %s WITH LOGIN PASSWORD '%s' REPLICATION;
+		CREATE USER %s WITH LOGIN PASSWORD '%s' REPLICATION;
 		GRANT CONNECT ON DATABASE %s TO %s;
+	`, ReplicationUser, ReplicationPass, DB, ReplicationUser))
+	if err != nil {
+		t.Fatalf("with creating replication user: %v", err)
+	}
+
+	// создание пользователя для чтение LSN и проверки слота репликации
+	_, err = conn.Exec(ctx, fmt.Sprintf(`
+		CREATE USER %s WITH LOGIN PASSWORD '%s' REPLICATION;
+		GRANT CONNECT ON DATABASE %s TO %s;
+		GRANT SELECT ON pg_replication_slots TO %s;
+		`, AppUser, AppPass, DB, AppUser, AppUser))
+	if err != nil {
+		t.Fatalf("with creating app user: %v", err)
+	}
+
+	// создание тестовой таблицы
+	_, err = conn.Exec(ctx, `
 		CREATE TABLE IF NOT EXISTS users (
 			id SERIAL PRIMARY KEY,
 			name TEXT NOT NULL,
 			email TEXT NOT NULL
 		);
-	`, TkCDCUser, TkCDCPassword, DB, TkCDCUser))
+	`)
 	requireNoErr(t, err, "create table")
 
 	// публикация (обязательно для pgoutput в PG 10+)

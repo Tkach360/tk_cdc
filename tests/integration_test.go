@@ -34,6 +34,11 @@ var (
 	ReplicationSlot  = "test_cdc_slot"
 	Plugin           = "pgoutput"
 	PublicationNames = "test_pub"
+	PostgresPassword = "testsecret"
+	DB               = "testdb"
+
+	TkCDCPassword = "tk_cdc_secret"
+	TkCDCUser     = "tk_cdc_user"
 )
 
 func TestCDC_CacheInvalidation(t *testing.T) {
@@ -46,15 +51,16 @@ func TestCDC_CacheInvalidation(t *testing.T) {
 		Image:        "postgres:16-alpine",
 		ExposedPorts: []string{"5432/tcp"},
 		Env: map[string]string{
-			"POSTGRES_USER":     "testuser",
-			"POSTGRES_PASSWORD": "testpass",
-			"POSTGRES_DB":       "testdb",
+			//"POSTGRES_USER":     "testuser",
+			"POSTGRES_PASSWORD": PostgresPassword,
+			"POSTGRES_DB":       DB,
 		},
 		Cmd: []string{
 			"postgres",
 			"-c", "wal_level=logical",
 			"-c", "max_replication_slots=4",
 			"-c", "max_wal_senders=4",
+			//"-c", "hba_file=/etc/postgresql/pg_hba.conf",
 		},
 		WaitingFor: wait.ForLog("database system is ready to accept connections").WithOccurrence(2),
 	}
@@ -70,7 +76,7 @@ func TestCDC_CacheInvalidation(t *testing.T) {
 
 	pgHost, _ := pgContainer.Host(ctx)
 	pgPort, _ := pgContainer.MappedPort(ctx, "5432")
-	pgDSN := fmt.Sprintf("postgres://testuser:testpass@%s:%s/testdb", pgHost, pgPort.Port())
+	adminDSN := fmt.Sprintf("postgres://postgres:%s@%s:%s/%s?sslmode=disable", PostgresPassword, pgHost, pgPort.Port(), DB)
 
 	// запускаем Redis
 	redisReq := testcontainers.ContainerRequest{
@@ -92,12 +98,14 @@ func TestCDC_CacheInvalidation(t *testing.T) {
 	redisPort, _ := redisContainer.MappedPort(ctx, "6379")
 	redisAddr := fmt.Sprintf("%s:%s", redisHost, redisPort.Port())
 
-	setupTestDB(ctx, t, pgDSN)
+	setupTestDB(ctx, t, adminDSN)
+
+	testDSN := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable", TkCDCUser, TkCDCPassword, pgHost, pgPort.Port(), DB)
 
 	// инициализация сервиса
 	cfg := config.Config{
 		Postgres: config.PostgresConfig{
-			DSN:              pgDSN,
+			DSN:              testDSN,
 			ReplicationSlot:  ReplicationSlot,
 			Plugin:           Plugin,
 			PublicationNames: PublicationNames,
@@ -131,10 +139,10 @@ func TestCDC_CacheInvalidation(t *testing.T) {
 	time.Sleep(2 * time.Second)
 
 	// тест UPDATE
-	testUpdateInvalidation(ctx, t, pgDSN, redisAddr)
+	testUpdateInvalidation(ctx, t, adminDSN, redisAddr)
 
 	// тест DELETE
-	testDeleteInvalidation(ctx, t, pgDSN, redisAddr)
+	testDeleteInvalidation(ctx, t, adminDSN, redisAddr)
 
 	repCancel()
 	select {
@@ -156,13 +164,15 @@ func setupTestDB(ctx context.Context, t *testing.T, dsn string) {
 	defer conn.Close(ctx)
 
 	// создаю тестовую таблицу
-	_, err = conn.Exec(ctx, `
+	_, err = conn.Exec(ctx, fmt.Sprintf(`
+		CREATE ROLE %s WITH LOGIN PASSWORD '%s' REPLICATION;
+		GRANT CONNECT ON DATABASE %s TO %s;
 		CREATE TABLE IF NOT EXISTS users (
 			id SERIAL PRIMARY KEY,
 			name TEXT NOT NULL,
 			email TEXT NOT NULL
 		);
-	`)
+	`, TkCDCUser, TkCDCPassword, DB, TkCDCUser))
 	requireNoErr(t, err, "create table")
 
 	// публикация (обязательно для pgoutput в PG 10+)

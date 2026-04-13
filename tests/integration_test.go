@@ -5,12 +5,13 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/Tkach360/tk_cdc/internal/config"
-	"github.com/Tkach360/tk_cdc/internal/mapper"
 	"github.com/Tkach360/tk_cdc/internal/replicator"
+	"github.com/docker/go-connections/nat"
 	"github.com/jackc/pgx/v5"
 	"github.com/redis/go-redis/v9"
 	"github.com/testcontainers/testcontainers-go"
@@ -30,44 +31,137 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-var (
-	PostgresPort     = "5432"
-	ReplicationSlot  = "test_cdc_slot"
-	Plugin           = "pgoutput"
-	PublicationNames = "test_pub"
-	PostgresPassword = "testsecret"
-	DB               = "testdb"
+type ContainersConfig struct {
+	pgImage     string
+	pgAdminUser string
+	pgAdminPass string
+	pgDBName    string
+	pgPort      nat.Port
 
-	ReplicationUser = "tk_cdc_replication"
-	ReplicationPass = "tk_cdc_replication_secret"
+	rdImage string
+	rdPort  nat.Port
+	rdPass  string
+	rdDB    int
 
-	AppUser = "tk_cdc_app"
-	AppPass = "tk_cdc_app_secret"
+	repUser   string
+	repPass   string
+	appUser   string
+	appPass   string
+	publNames string
+	repSlot   string
 
-	TkCDCPassword = "tk_cdc_secret"
-	TkCDCUser     = "tk_cdc_user"
-)
+	configYML string
+}
 
-func TestCDC_CacheInvalidation(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
+// TODO: переделать на Options
+func insertDefaultFields(s *ContainersConfig) {
+	if s.pgImage == "" {
+		s.pgImage = "postgres:16-alpine"
+	}
+	if s.pgAdminUser == "" {
+		s.pgAdminUser = "default_admin"
+	}
+	if s.pgAdminPass == "" {
+		s.pgAdminPass = "default_admin_pass"
+	}
+	if s.pgDBName == "" {
+		s.pgDBName = "default_test_db"
+	}
+	if s.pgPort == "" {
+		s.pgPort = nat.Port("5432")
+	}
+	if s.rdImage == "" {
+		s.rdImage = "redis:7-alpine"
+	}
+	if s.rdPort == "" {
+		s.rdPort = nat.Port("6379")
+	}
+	if s.rdPass == "" {
+		s.rdPass = "default_redis_pass"
+	}
+	if s.repUser == "" {
+		s.repUser = "default_replication"
+	}
+	if s.repPass == "" {
+		s.repPass = "default_replication_pass"
+	}
+	if s.appUser == "" {
+		s.appUser = "default_app_user"
+	}
+	if s.appPass == "" {
+		s.appPass = "default_app_pass"
+	}
+	if s.publNames == "" {
+		s.publNames = "default_publNames"
+	}
+	if s.repSlot == "" {
+		s.repSlot = "default_rep_slot" // не допускаются заглавные буквы
+	}
+	if s.configYML == "" {
+		s.configYML = `
+postgres:
+  addr: "localhost:5432"
+  db: "default_test_db"
+  replication_user: "default_replication"
+  replication_pass: "default_replication_pass"
+  app_user: "default_app_user"
+  app_pass: "default_app_pass"
+  replication_slot: "default_rep_slot"
+  plugin: "pgoutput"
+  publication_names: "default_publNames"
+redis:
+  addr: "localhost:6379"
+  password: "default_redis_pass"
+  db: 0
+mapping:
+  default_schema: "public"
+  rules:
+   - table: "users"
+     key_pattern: "user:{id}"
+`
+	}
+}
 
+func (s *ContainersConfig) initContainers(ctx context.Context) (testcontainers.Container, testcontainers.Container, error) {
+
+	pgContainer, err := s.createPostgresContainer(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("creating postgres: %w", err)
+	}
+
+	pgHost, _ := pgContainer.Host(ctx)
+	pgPort, _ := pgContainer.MappedPort(ctx, s.pgPort)
+	pgAddr := fmt.Sprintf("%s:%s", pgHost, pgPort.Port())
+	adminDSN := fmt.Sprintf("postgres://postgres:%s@%s/%s?sslmode=disable", s.pgAdminPass, pgAddr, s.pgDBName)
+
+	err = s.setupDBForService(ctx, adminDSN)
+	if err != nil {
+		return nil, nil, fmt.Errorf("setup database: %w", err)
+	}
+
+	rdContainer, err := s.createRedisContainer(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("creating redis: %w", err)
+	}
+
+	return pgContainer, rdContainer, nil
+}
+
+// создать контейнер с postgres
+func (s *ContainersConfig) createPostgresContainer(ctx context.Context) (testcontainers.Container, error) {
 	// запускаем PostgreSQL с логической репликацией
 	pgReq := testcontainers.ContainerRequest{
-		// TODO: может вынести параметры конфигураций куда-нибудь?
-		Image:        "postgres:16-alpine",
-		ExposedPorts: []string{PostgresPort + "/tcp"},
+		Image:        s.pgImage,
+		ExposedPorts: []string{s.pgPort.Port() + "/tcp"},
 		Env: map[string]string{
-			//"POSTGRES_USER":     "testuser",
-			"POSTGRES_PASSWORD": PostgresPassword,
-			"POSTGRES_DB":       DB,
+			"POSTGRES_PASSWORD": s.pgAdminPass,
+			"POSTGRES_DB":       s.pgDBName,
 		},
 		Cmd: []string{
 			"postgres",
 			"-c", "wal_level=logical",
 			"-c", "max_replication_slots=4",
 			"-c", "max_wal_senders=4",
-			//"-c", "hba_file=/etc/postgresql/pg_hba.conf",
 		},
 		WaitingFor: wait.ForLog("database system is ready to accept connections").WithOccurrence(2),
 	}
@@ -77,19 +171,18 @@ func TestCDC_CacheInvalidation(t *testing.T) {
 		Started:          true,
 	})
 	if err != nil {
-		t.Fatalf("failed to start postgres: %v", err)
+		return nil, fmt.Errorf("failed to start postgres: %v", err)
 	}
-	defer pgContainer.Terminate(ctx)
 
-	pgHost, _ := pgContainer.Host(ctx)
-	pgPort, _ := pgContainer.MappedPort(ctx, "5432")
-	pgAddr := fmt.Sprintf("%s:%s", pgHost, pgPort.Port())
-	adminDSN := fmt.Sprintf("postgres://postgres:%s@%s/%s?sslmode=disable", PostgresPassword, pgAddr, DB)
+	return pgContainer, nil
+}
 
+// создать контейнер с redis
+func (s *ContainersConfig) createRedisContainer(ctx context.Context) (testcontainers.Container, error) {
 	// запускаем Redis
 	redisReq := testcontainers.ContainerRequest{
-		Image:        "redis:7-alpine",
-		ExposedPorts: []string{"6379/tcp"},
+		Image:        s.rdImage,
+		ExposedPorts: []string{s.rdPort.Port() + "/tcp"},
 		WaitingFor:   wait.ForLog("Ready to accept connections"),
 	}
 
@@ -98,46 +191,107 @@ func TestCDC_CacheInvalidation(t *testing.T) {
 		Started:          true,
 	})
 	if err != nil {
-		t.Fatalf("failed to start redis: %v", err)
+		return nil, fmt.Errorf("failed to start redis: %w", err)
 	}
-	defer redisContainer.Terminate(ctx)
 
-	redisHost, _ := redisContainer.Host(ctx)
-	redisPort, _ := redisContainer.MappedPort(ctx, "6379")
-	redisAddr := fmt.Sprintf("%s:%s", redisHost, redisPort.Port())
+	return redisContainer, nil
+}
 
-	setupTestDB(ctx, t, adminDSN)
-
-	// инициализация сервиса
-	// TODO: нужно сделать чтение конфига из файла
-	cfg := config.Config{
-		Postgres: config.PostgresConfig{
-			Addr:             pgAddr,
-			DB:               DB,
-			ReplicationUser:  ReplicationUser,
-			ReplicationPass:  ReplicationPass,
-			AppUser:          AppUser,
-			AppPass:          AppPass,
-			ReplicationSlot:  ReplicationSlot,
-			Plugin:           Plugin,
-			PublicationNames: PublicationNames,
-		},
-		Redis: config.RedisConfig{
-			Addr: redisAddr,
-		},
-		Mapping: mapper.MappingConfig{
-			DefaultSchema: "public",
-			Rules: []mapper.MappingRule{
-				{Table: mapper.Table{Schema: "public", Name: "users"}, KeyPattern: "user:{id}"},
-			},
-		},
+// нстроить базу данных для сервиса
+func (s *ContainersConfig) setupDBForService(ctx context.Context, dsn string) error {
+	conn, err := pgx.Connect(ctx, dsn)
+	if err != nil {
+		return fmt.Errorf("db connect failed: %w", err)
 	}
+	defer conn.Close(ctx)
+
+	// создание пользователя для репликации
+	_, err = conn.Exec(ctx, fmt.Sprintf(`
+		CREATE USER %s WITH LOGIN PASSWORD '%s' REPLICATION;
+		GRANT CONNECT ON DATABASE %s TO %s;
+	`, s.repUser, s.repPass, s.pgDBName, s.repUser))
+	if err != nil {
+		return fmt.Errorf("with creating replication user: %w", err)
+	}
+
+	// создание пользователя для чтение LSN и проверки слота репликации
+	_, err = conn.Exec(ctx, fmt.Sprintf(`
+		CREATE USER %s WITH LOGIN PASSWORD '%s' REPLICATION;
+		GRANT CONNECT ON DATABASE %s TO %s;
+		GRANT SELECT ON pg_replication_slots TO %s;
+		`, s.appUser, s.appPass, s.pgDBName, s.appUser, s.appUser))
+	if err != nil {
+		return fmt.Errorf("with creating app user: %w", err)
+	}
+
+	// публикация (обязательно для pgoutput в PG 10+)
+	_, err = conn.Exec(ctx, fmt.Sprintf(`
+		CREATE PUBLICATION %s FOR ALL TABLES;
+	`, s.publNames))
+	if err != nil {
+		return fmt.Errorf("create publication: %w", err)
+	}
+
+	// создаю слот
+	_, err = conn.Exec(ctx, fmt.Sprintf(`
+		SELECT pg_create_logical_replication_slot('%s', 'pgoutput');
+	`, s.repSlot))
+
+	// проверка на ошибку "replication slot already exists"
+	isAlreadyExists := func(err error) bool {
+		return err != nil && (err.Error() == fmt.Sprintf("ERROR: replication slot \"%s\" already exists (SQLSTATE 42710)", s.repSlot))
+	}
+
+	// игнорирую ошибку "slot already exists" если тест запускается повторно
+	if err != nil && !isAlreadyExists(err) {
+		return fmt.Errorf("create replication slot: %w", err)
+	}
+
+	return nil
+}
+
+// функция для тестирования
+// emulateWork - функция, эмулирующая работу postgres и redis, принимает их соединения и возвращает список ключей, которые должны удалиться в redis
+func (s *ContainersConfig) TestFunc(ctx context.Context, t *testing.T, emulateWork func(ctx context.Context, t *testing.T, pgConn *pgx.Conn, rdConn *redis.Client) []string) {
+
+	insertDefaultFields(s)
+	pgContainer, rdContainer, err := s.initContainers(ctx)
+	if err != nil {
+		t.Fatalf("init: %v", err)
+	}
+
+	pgHost, _ := pgContainer.Host(ctx)
+	pgPort, _ := pgContainer.MappedPort(ctx, s.pgPort)
+	pgAddr := fmt.Sprintf("%s:%s", pgHost, pgPort.Port())
+	pgAdminDSN := fmt.Sprintf("postgres://postgres:%s@%s/%s?sslmode=disable", s.pgAdminPass, pgAddr, s.pgDBName)
+
+	rdHost, _ := rdContainer.Host(ctx)
+	rdPort, _ := rdContainer.MappedPort(ctx, s.rdPort)
+	rdAddr := fmt.Sprintf("%s:%s", rdHost, rdPort.Port())
+
+	rdb := redis.NewClient(&redis.Options{Addr: rdAddr, Password: s.rdPass, DB: s.rdDB})
+	defer rdb.Close()
+	pg, _ := pgx.Connect(ctx, pgAdminDSN)
+	defer pg.Close(ctx)
+
+	tmpFile := filepath.Join(t.TempDir(), "config.yaml")
+	err = os.WriteFile(tmpFile, []byte(s.configYML), 0644)
+	if err != nil {
+		t.Fatalf("creating temp config: %v", err)
+	}
+
+	cfg, err := config.Load(tmpFile)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	cfg.Redis.Addr = rdAddr
+	cfg.Postgres.Addr = pgAddr
 
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("incorrect test config: %v", err)
 	}
 
-	rep, err := replicator.New(&cfg)
+	rep, err := replicator.New(cfg)
 	if err != nil {
 		t.Fatalf("replicator init failed: %v", err)
 	}
@@ -154,11 +308,13 @@ func TestCDC_CacheInvalidation(t *testing.T) {
 	// TODO: стоит ли давать сервису некоторое время для подключения?
 	time.Sleep(2 * time.Second)
 
-	// тест UPDATE
-	testUpdateInvalidation(ctx, t, adminDSN, redisAddr)
+	keys := emulateWork(ctx, t, pg, rdb)
 
-	// тест DELETE
-	testDeleteInvalidation(ctx, t, adminDSN, redisAddr)
+	// так как CDC асинхронный нужно подождать
+	deleted := waitForRedisKeys(ctx, t, rdb, keys, 5*time.Second)
+	if !deleted {
+		t.Fatal("Redis key 'user:1' was NOT deleted after UPDATE")
+	}
 
 	repCancel()
 	select {
@@ -171,123 +327,8 @@ func TestCDC_CacheInvalidation(t *testing.T) {
 	}
 }
 
-// установить тестовую базу данных
-func setupTestDB(ctx context.Context, t *testing.T, dsn string) {
-	conn, err := pgx.Connect(ctx, dsn)
-	if err != nil {
-		t.Fatalf("db connect failed: %v", err)
-	}
-	defer conn.Close(ctx)
-
-	// создание пользователя для репликации
-	_, err = conn.Exec(ctx, fmt.Sprintf(`
-		CREATE USER %s WITH LOGIN PASSWORD '%s' REPLICATION;
-		GRANT CONNECT ON DATABASE %s TO %s;
-	`, ReplicationUser, ReplicationPass, DB, ReplicationUser))
-	if err != nil {
-		t.Fatalf("with creating replication user: %v", err)
-	}
-
-	// создание пользователя для чтение LSN и проверки слота репликации
-	_, err = conn.Exec(ctx, fmt.Sprintf(`
-		CREATE USER %s WITH LOGIN PASSWORD '%s' REPLICATION;
-		GRANT CONNECT ON DATABASE %s TO %s;
-		GRANT SELECT ON pg_replication_slots TO %s;
-		`, AppUser, AppPass, DB, AppUser, AppUser))
-	if err != nil {
-		t.Fatalf("with creating app user: %v", err)
-	}
-
-	// создание тестовой таблицы
-	_, err = conn.Exec(ctx, `
-		CREATE TABLE IF NOT EXISTS users (
-			id SERIAL PRIMARY KEY,
-			name TEXT NOT NULL,
-			email TEXT NOT NULL
-		);
-	`)
-	requireNoErr(t, err, "create table")
-
-	// публикация (обязательно для pgoutput в PG 10+)
-	_, err = conn.Exec(ctx, fmt.Sprintf(`
-		CREATE PUBLICATION %s FOR ALL TABLES;
-	`, PublicationNames))
-	requireNoErr(t, err, "create publication")
-
-	// создаю слот
-	_, err = conn.Exec(ctx, fmt.Sprintf(`
-		SELECT pg_create_logical_replication_slot('%s', '%s');
-	`, ReplicationSlot, Plugin))
-	// игнорирую ошибку "slot already exists" если тест запускается повторно
-	if err != nil && !isAlreadyExists(err) {
-		requireNoErr(t, err, "create replication slot")
-	}
-}
-
-// вспомогательная функция для более удобного вывода
-func requireNoErr(t *testing.T, err error, msg string) {
-	t.Helper()
-	if err != nil {
-		t.Fatalf("%s: %v", msg, err)
-	}
-}
-
-// проверка на ошибку "replication slot already exists"
-func isAlreadyExists(err error) bool {
-	return err != nil && (err.Error() == fmt.Sprintf("ERROR: replication slot \"%s\" already exists (SQLSTATE 42710)", ReplicationSlot))
-}
-
-func testUpdateInvalidation(ctx context.Context, t *testing.T, pgDSN, redisAddr string) {
-	rdb := redis.NewClient(&redis.Options{Addr: redisAddr})
-	defer rdb.Close()
-	pg, _ := pgx.Connect(ctx, pgDSN)
-	defer pg.Close(ctx)
-
-	// вставка строки
-	_, err := pg.Exec(ctx, "INSERT INTO users (name, email) VALUES ('Alice', 'alice@test.com')")
-	requireNoErr(t, err, "insert user")
-
-	// эмулируем кеш приложения
-	// TODO: всегда ли ключ будет "user:1"?
-	err = rdb.Set(ctx, "user:1", `{"name":"Alice","email":"alice@test.com"}`, 0).Err()
-	requireNoErr(t, err, "set redis key")
-
-	// изменяем данные в БД
-	_, err = pg.Exec(ctx, "UPDATE users SET email='alice_updated@test.com' WHERE id=1")
-	requireNoErr(t, err, "update user")
-
-	// так как CDC асинхронный нужно подождать
-	deleted := waitForRedisKey(ctx, t, rdb, "user:1", 5*time.Second)
-	if !deleted {
-		t.Fatal("Redis key 'user:1' was NOT deleted after UPDATE")
-	}
-}
-
-func testDeleteInvalidation(ctx context.Context, t *testing.T, pgDSN, redisAddr string) {
-	rdb := redis.NewClient(&redis.Options{Addr: redisAddr})
-	defer rdb.Close()
-	pg, _ := pgx.Connect(ctx, pgDSN)
-	defer pg.Close(ctx)
-
-	_, err := pg.Exec(ctx, "INSERT INTO users (name, email) VALUES ('Bob', 'bob@test.com')")
-	requireNoErr(t, err, "insert user")
-
-	// TODO: проблема, всегда ли я буду запускать тесты в такой последовательности? если нет, то нужно как-то узнавать id для эмуляции добавления ключа
-	// TODO: ну так сделать SELECT для надежности
-	err = rdb.Set(ctx, "user:2", `{"name":"Bob","email":"bob@test.com"}`, 0).Err()
-	requireNoErr(t, err, "set redis key")
-
-	_, err = pg.Exec(ctx, "DELETE FROM users WHERE id=2")
-	requireNoErr(t, err, "delete user")
-
-	deleted := waitForRedisKey(ctx, t, rdb, "user:2", 5*time.Second)
-	if !deleted {
-		t.Fatal("Redis key 'user:2' was NOT deleted after DELETE")
-	}
-}
-
-// опрашивать Redis до удаления ключа или таймаута
-func waitForRedisKey(ctx context.Context, t *testing.T, rdb *redis.Client, key string, timeout time.Duration) bool {
+// опрашивать redis до удаления ключа или таймаута
+func waitForRedisKeys(ctx context.Context, t *testing.T, rdb *redis.Client, keys []string, timeout time.Duration) bool {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		select {
@@ -296,16 +337,116 @@ func waitForRedisKey(ctx context.Context, t *testing.T, rdb *redis.Client, key s
 		default:
 		}
 
-		exists, err := rdb.Exists(ctx, key).Result()
-		if err != nil {
-			t.Logf("redis check error: %v", err)
-			time.Sleep(100 * time.Millisecond)
-			continue
+		allMissing := true
+		for _, key := range keys {
+			exists, err := rdb.Exists(ctx, key).Result()
+			if err != nil {
+				t.Logf("redis check error for key %s: %v", key, err)
+				allMissing = false
+				break
+			}
+			if exists > 0 {
+				allMissing = false
+				break
+			}
 		}
-		if exists == 0 {
+
+		if allMissing {
 			return true
 		}
+
 		time.Sleep(100 * time.Millisecond)
 	}
 	return false
+}
+
+func TestCDC_CacheInvalidation(t *testing.T) {
+
+	tests := []struct {
+		name            string
+		emulateWorkFunc func(ctx context.Context, t *testing.T, pgConn *pgx.Conn, rdConn *redis.Client) []string
+	}{
+		{
+			name: "updating one record in a tracked table",
+			emulateWorkFunc: func(ctx context.Context, t *testing.T, pgConn *pgx.Conn, rdConn *redis.Client) []string {
+				// создание тестовой таблицы
+				_, err := pgConn.Exec(ctx, `
+				CREATE TABLE IF NOT EXISTS users (
+					id SERIAL PRIMARY KEY,
+					name TEXT NOT NULL,
+					email TEXT NOT NULL
+				);
+			`)
+				if err != nil {
+					t.Fatalf("create table: %v", err)
+				}
+
+				// вставка строки
+				_, err = pgConn.Exec(ctx, "INSERT INTO users (name, email) VALUES ('Alice', 'alice@test.com')")
+				if err != nil {
+					t.Errorf("insert user: %v", err)
+				}
+
+				// эмулируем кеш приложения
+				// TODO: всегда ли ключ будет "user:1"?
+				err = rdConn.Set(ctx, "user:1", `{"name":"Alice","email":"alice@test.com"}`, 0).Err()
+				if err != nil {
+					t.Errorf("set redis key: %v", err)
+				}
+
+				// изменяем данные в БД
+				_, err = pgConn.Exec(ctx, "UPDATE users SET email='alice_updated@test.com' WHERE id=1")
+				if err != nil {
+					t.Errorf("update user: %v", err)
+				}
+
+				return []string{"user:1"}
+			},
+		},
+		{
+			name: "deleting one record in a tracked table",
+			emulateWorkFunc: func(ctx context.Context, t *testing.T, pgConn *pgx.Conn, rdConn *redis.Client) []string {
+				// создание тестовой таблицы
+				_, err := pgConn.Exec(ctx, `
+				CREATE TABLE IF NOT EXISTS users (
+					id SERIAL PRIMARY KEY,
+					name TEXT NOT NULL,
+					email TEXT NOT NULL
+				);
+			`)
+				if err != nil {
+					t.Fatalf("create table: %v", err)
+				}
+
+				_, err = pgConn.Exec(ctx, "INSERT INTO users (name, email) VALUES ('Bob', 'bob@test.com')")
+				if err != nil {
+					t.Errorf("insert user: %v", err)
+				}
+
+				// TODO: проблема, всегда ли я буду запускать тесты в такой последовательности? если нет, то нужно как-то узнавать id для эмуляции добавления ключа
+				// TODO: ну так сделать SELECT для надежности
+				err = rdConn.Set(ctx, "user:1", `{"name":"Bob","email":"bob@test.com"}`, 0).Err()
+				if err != nil {
+					t.Errorf("set redis key: %v", err)
+				}
+
+				_, err = pgConn.Exec(ctx, "DELETE FROM users WHERE id=1")
+				if err != nil {
+					t.Errorf("delete user: %v", err)
+				}
+
+				return []string{"user:1"}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+			defer cancel()
+
+			initializer := ContainersConfig{}
+			initializer.TestFunc(ctx, t, tt.emulateWorkFunc)
+		})
+	}
 }

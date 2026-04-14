@@ -269,8 +269,6 @@ func (r *Replicator) processLogicalMessage(ctx context.Context, msg pglogrepl.Me
 
 	case *pglogrepl.CommitMessage:
 		slog.Debug("commit transaction", "commit_lsn", msg.CommitLSN, "end_lsn", msg.TransactionEndLSN)
-		// TODO: вот тут нужно собственно обновлять данные в redis, так как только в сейчас стало ясно что данные зафиксированы
-		// TODO: если транзакция не закоммичена то нужно откатывать изменения
 		return true, nil
 
 	case *pglogrepl.RelationMessage:

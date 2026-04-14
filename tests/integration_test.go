@@ -251,8 +251,13 @@ func (s *ContainersConfig) setupDBForService(ctx context.Context, dsn string) er
 }
 
 // функция для тестирования
-// emulateWork - функция, эмулирующая работу postgres и redis, принимает их соединения и возвращает список ключей, которые должны удалиться в redis
-func (s *ContainersConfig) TestFunc(ctx context.Context, t *testing.T, emulateWork func(ctx context.Context, t *testing.T, pgConn *pgx.Conn, rdConn *redis.Client) []string) {
+// emulateWork - функция, эмулирующая работу postgres и redis, принимает их соединения
+// checkFunc - вызывается после того, как emulateWork отработала и проверяет состаяние redis
+func (s *ContainersConfig) TestFunc(
+	ctx context.Context,
+	t *testing.T,
+	emulateWork func(ctx context.Context, t *testing.T, pgConn *pgx.Conn, rdConn *redis.Client),
+	checkFunc func(ctx context.Context, t *testing.T, rdConn *redis.Client)) {
 
 	insertDefaultFields(s)
 	pgContainer, rdContainer, err := s.initContainers(ctx)
@@ -308,13 +313,8 @@ func (s *ContainersConfig) TestFunc(ctx context.Context, t *testing.T, emulateWo
 	// TODO: стоит ли давать сервису некоторое время для подключения?
 	time.Sleep(2 * time.Second)
 
-	keys := emulateWork(ctx, t, pg, rdb)
-
-	// так как CDC асинхронный нужно подождать
-	deleted := waitForRedisKeys(ctx, t, rdb, keys, 5*time.Second)
-	if !deleted {
-		t.Fatal("Redis key 'user:1' was NOT deleted after UPDATE")
-	}
+	emulateWork(ctx, t, pg, rdb)
+	checkFunc(ctx, t, rdb)
 
 	repCancel()
 	select {
@@ -364,11 +364,12 @@ func TestCDC_CacheInvalidation(t *testing.T) {
 
 	tests := []struct {
 		name            string
-		emulateWorkFunc func(ctx context.Context, t *testing.T, pgConn *pgx.Conn, rdConn *redis.Client) []string
+		emulateWorkFunc func(ctx context.Context, t *testing.T, pgConn *pgx.Conn, rdConn *redis.Client)
+		checkFunc       func(ctx context.Context, t *testing.T, rdConn *redis.Client)
 	}{
 		{
 			name: "updating one record in a tracked table",
-			emulateWorkFunc: func(ctx context.Context, t *testing.T, pgConn *pgx.Conn, rdConn *redis.Client) []string {
+			emulateWorkFunc: func(ctx context.Context, t *testing.T, pgConn *pgx.Conn, rdConn *redis.Client) {
 				// создание тестовой таблицы
 				_, err := pgConn.Exec(ctx, `
 				CREATE TABLE IF NOT EXISTS users (
@@ -399,13 +400,18 @@ func TestCDC_CacheInvalidation(t *testing.T) {
 				if err != nil {
 					t.Errorf("update user: %v", err)
 				}
-
-				return []string{"user:1"}
+			},
+			checkFunc: func(ctx context.Context, t *testing.T, rdConn *redis.Client) {
+				// так как CDC асинхронный нужно подождать
+				deleted := waitForRedisKeys(ctx, t, rdConn, []string{"user:1"}, 1*time.Second)
+				if !deleted {
+					t.Fatal("Redis key 'user:1' was NOT deleted after UPDATE")
+				}
 			},
 		},
 		{
 			name: "deleting one record in a tracked table",
-			emulateWorkFunc: func(ctx context.Context, t *testing.T, pgConn *pgx.Conn, rdConn *redis.Client) []string {
+			emulateWorkFunc: func(ctx context.Context, t *testing.T, pgConn *pgx.Conn, rdConn *redis.Client) {
 				// создание тестовой таблицы
 				_, err := pgConn.Exec(ctx, `
 				CREATE TABLE IF NOT EXISTS users (
@@ -434,8 +440,12 @@ func TestCDC_CacheInvalidation(t *testing.T) {
 				if err != nil {
 					t.Errorf("delete user: %v", err)
 				}
-
-				return []string{"user:1"}
+			},
+			checkFunc: func(ctx context.Context, t *testing.T, rdConn *redis.Client) {
+				deleted := waitForRedisKeys(ctx, t, rdConn, []string{"user:1"}, 1*time.Second)
+				if !deleted {
+					t.Fatal("Redis key 'user:1' was NOT deleted after UPDATE")
+				}
 			},
 		},
 	}
@@ -446,7 +456,7 @@ func TestCDC_CacheInvalidation(t *testing.T) {
 			defer cancel()
 
 			initializer := ContainersConfig{}
-			initializer.TestFunc(ctx, t, tt.emulateWorkFunc)
+			initializer.TestFunc(ctx, t, tt.emulateWorkFunc, tt.checkFunc)
 		})
 	}
 }

@@ -281,17 +281,20 @@ func (r *Replicator) processLogicalMessage(ctx context.Context, msg pglogrepl.Me
 		return false, nil
 
 	case *pglogrepl.InsertMessage:
-		// TODO: подойдет ли для идентификации отношения RelationID?
-		return r.handleRowChange(ctx, msg.RelationID, msg.Tuple)
+		slog.Debug("insert message")
+		return false, nil
 
 	case *pglogrepl.UpdateMessage:
+		slog.Debug("update message")
 		return r.handleRowChange(ctx, msg.RelationID, msg.NewTuple)
 
 	case *pglogrepl.DeleteMessage:
+		slog.Debug("delete message")
 		return r.handleRowChange(ctx, msg.RelationID, msg.OldTuple)
 
 	case *pglogrepl.LogicalDecodingMessage:
 		// пользовательское сообщение
+		slog.Debug("logical decoding message")
 		return false, nil
 
 	default:

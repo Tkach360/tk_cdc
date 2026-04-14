@@ -2,8 +2,6 @@ postgres:
   addr: "${DB_ADDR:-localhost:5432}"
   db: "${DB:-demo}"
 
-  # Data Source Name - строка подключения к БД
-  # dsn: "${POSTGRES_DSN:-postgres://app:secret@localhost:5432/demo}"
   # пользователь для чтения репликации
   replication_user: "${TKCDC_REPLICATION_USER:-tkcdc_replication_user}"
   replication_pass: "${TKCDC_REPLICATION_PASS:-tkcdc_replication_pass}"

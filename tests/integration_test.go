@@ -448,6 +448,80 @@ func TestCDC_CacheInvalidation(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "uncommitted changes",
+			emulateWorkFunc: func(ctx context.Context, t *testing.T, pgConn *pgx.Conn, rdConn *redis.Client) {
+				// создание тестовой таблицы
+				_, err := pgConn.Exec(ctx, `
+				CREATE TABLE IF NOT EXISTS users (
+					id SERIAL PRIMARY KEY,
+					name TEXT NOT NULL,
+					email TEXT NOT NULL
+				);
+			`)
+				if err != nil {
+					t.Fatalf("create table: %v", err)
+				}
+
+				// вставка строки
+				_, err = pgConn.Exec(ctx, "INSERT INTO users (name, email) VALUES ('Alice', 'alice@test.com')")
+				if err != nil {
+					t.Errorf("insert user: %v", err)
+				}
+
+				// эмулируем кеш приложения
+				// TODO: всегда ли ключ будет "user:1"?
+				err = rdConn.Set(ctx, "user:1", `{"name":"Alice","email":"alice@test.com"}`, 0).Err()
+				if err != nil {
+					t.Errorf("set redis key: %v", err)
+				}
+
+				// изменяем данные в БД
+				_, err = pgConn.Exec(ctx, `
+					BEGIN;
+					UPDATE users SET email='alice_updated@test.com' WHERE id=1;
+					ROLLBACK;
+				`)
+				if err != nil {
+					t.Errorf("update user: %v", err)
+				}
+			},
+			checkFunc: func(ctx context.Context, t *testing.T, rdConn *redis.Client) {
+				// TODO: нужно сделать другой способ проверки, так как просто ждать и проверять ненадежно и долго
+				t.Helper()
+
+				key := "user:1"
+
+				timeout := 1 * time.Second
+				interval := 10 * time.Millisecond
+
+				deadline := time.Now().Add(timeout)
+
+				for time.Now().Before(deadline) {
+					select {
+					case <-ctx.Done():
+						t.Errorf("Context cancelled before key '%s' was found: %v", key, ctx.Err())
+						return
+					default:
+						exists, err := rdConn.Exists(ctx, key).Result()
+						if err != nil {
+							t.Errorf("Failed to check existence of key '%s': %v", key, err)
+							return
+						}
+
+						if exists == 1 {
+							t.Logf("Successfully verified that key '%s' exists in Redis", key)
+							return
+						}
+
+						time.Sleep(interval)
+					}
+				}
+
+				// Таймаут - ключ не появился
+				t.Errorf("Timeout: key '%s' was not found in Redis after %v", key, timeout)
+			},
+		},
 	}
 
 	for _, tt := range tests {

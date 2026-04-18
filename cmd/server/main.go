@@ -9,7 +9,7 @@ import (
 	"syscall"
 
 	"github.com/Tkach360/tk_cdc/internal/config"
-	"github.com/Tkach360/tk_cdc/internal/replicator"
+	"github.com/Tkach360/tk_cdc/internal/service"
 )
 
 func main() {

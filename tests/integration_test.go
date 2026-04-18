@@ -38,6 +38,19 @@ type ContainersConfig struct {
 	repSlot   string
 
 	configYML string
+
+	pgContainer testcontainers.Container
+	rdContainer testcontainers.Container
+}
+
+func NewContainersConfig(ctx context.Context) (*ContainersConfig, error) {
+	cc := ContainersConfig{}
+	insertDefaultFields(&cc)
+	err := cc.initContainers(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &cc, nil
 }
 
 // TODO: переделать на Options
@@ -109,11 +122,11 @@ mapping:
 	}
 }
 
-func (s *ContainersConfig) initContainers(ctx context.Context) (testcontainers.Container, testcontainers.Container, error) {
+func (s *ContainersConfig) initContainers(ctx context.Context) error {
 
 	pgContainer, err := s.createPostgresContainer(ctx)
 	if err != nil {
-		return nil, nil, fmt.Errorf("creating postgres: %w", err)
+		return fmt.Errorf("creating postgres: %w", err)
 	}
 
 	pgHost, _ := pgContainer.Host(ctx)
@@ -123,15 +136,18 @@ func (s *ContainersConfig) initContainers(ctx context.Context) (testcontainers.C
 
 	err = s.setupDBForService(ctx, adminDSN)
 	if err != nil {
-		return nil, nil, fmt.Errorf("setup database: %w", err)
+		return fmt.Errorf("setup database: %w", err)
 	}
 
 	rdContainer, err := s.createRedisContainer(ctx)
 	if err != nil {
-		return nil, nil, fmt.Errorf("creating redis: %w", err)
+		return fmt.Errorf("creating redis: %w", err)
 	}
 
-	return pgContainer, rdContainer, nil
+	s.pgContainer = pgContainer
+	s.rdContainer = rdContainer
+
+	return nil
 }
 
 // создать контейнер с postgres
@@ -246,11 +262,8 @@ func (s *ContainersConfig) TestFunc(
 	emulateWork func(ctx context.Context, t *testing.T, pgConn *pgx.Conn, rdConn *redis.Client),
 	checkFunc func(ctx context.Context, t *testing.T, rdConn *redis.Client)) {
 
-	insertDefaultFields(s)
-	pgContainer, rdContainer, err := s.initContainers(ctx)
-	if err != nil {
-		t.Fatalf("init: %v", err)
-	}
+	pgContainer := s.pgContainer
+	rdContainer := s.rdContainer
 
 	pgHost, _ := pgContainer.Host(ctx)
 	pgPort, _ := pgContainer.MappedPort(ctx, s.pgPort)
@@ -267,7 +280,7 @@ func (s *ContainersConfig) TestFunc(
 	defer pg.Close(ctx)
 
 	tmpFile := filepath.Join(t.TempDir(), "config.yaml")
-	err = os.WriteFile(tmpFile, []byte(s.configYML), 0644)
+	err := os.WriteFile(tmpFile, []byte(s.configYML), 0644)
 	if err != nil {
 		t.Fatalf("creating temp config: %v", err)
 	}
@@ -517,12 +530,15 @@ func TestCDC_CacheInvalidation(t *testing.T) {
 		},
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	initializer, err := NewContainersConfig(ctx)
+	if err != nil {
+		t.Fatalf("Containers config: %v", err)
+	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-			defer cancel()
-
-			initializer := ContainersConfig{}
 			initializer.TestFunc(ctx, t, tt.emulateWorkFunc, tt.checkFunc)
 		})
 	}

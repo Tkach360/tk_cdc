@@ -56,6 +56,8 @@ func (i *Invalidator) Run(ctx context.Context, in <-chan []string) error {
 				return fmt.Errorf("Invalidator: invalidate keys: %w", err)
 			}
 
+			slog.Info("Invalidator: invalidate keys", "count", len(keys))
+
 		case <-ctx.Done():
 			slog.Info("Invalidator: context cancelled, exiting")
 			return ctx.Err()

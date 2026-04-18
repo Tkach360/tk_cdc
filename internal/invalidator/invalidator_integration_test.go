@@ -3,6 +3,7 @@ package invalidator
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -151,7 +152,8 @@ func TestInvalidator_Invalidate(t *testing.T) {
 	}
 
 	cfg := config.RedisConfig{Addr: redisAddr}
-	inv, err := New(&cfg)
+	logger := slog.New(slog.DiscardHandler)
+	inv, err := New(&cfg, logger)
 	if err != nil {
 		t.Fatalf("invalidator init error: %v", err)
 	}

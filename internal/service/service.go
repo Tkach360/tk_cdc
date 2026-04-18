@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/Tkach360/tk_cdc/internal/config"
 	"github.com/Tkach360/tk_cdc/internal/invalidator"
@@ -13,20 +14,21 @@ type Service struct {
 	cfg         *config.Config
 	replicator  *replicator.Replicator
 	invalidator *invalidator.Invalidator
+	logger      *slog.Logger
 }
 
-func New(cfg *config.Config) (*Service, error) {
-	replicator, err := replicator.New(cfg)
+func New(cfg *config.Config, logger *slog.Logger) (*Service, error) {
+	replicator, err := replicator.New(cfg, logger)
 	if err != nil {
 		return nil, err
 	}
 
-	invalidator, err := invalidator.New(&cfg.Redis)
+	invalidator, err := invalidator.New(&cfg.Redis, logger)
 	if err != nil {
 		return nil, err
 	}
 
-	return &Service{cfg, replicator, invalidator}, nil
+	return &Service{cfg, replicator, invalidator, logger}, nil
 }
 
 // запуск сервиса

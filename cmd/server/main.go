@@ -27,7 +27,8 @@ func main() {
 	}
 	slog.Info("starting tk_cdc")
 
-	svc, err := service.New(cfg)
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	svc, err := service.New(cfg, logger)
 	if err != nil {
 		slog.Error("init failed", "err", err)
 		os.Exit(1)

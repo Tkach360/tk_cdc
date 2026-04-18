@@ -18,7 +18,9 @@ import (
 )
 
 type Replicator struct {
-	cfg       *config.Config
+	cfg    *config.Config
+	logger *slog.Logger
+
 	repConfig *pgx.ConnConfig
 	appConfig *pgx.ConnConfig
 	mapper    *mapper.Mapper
@@ -26,7 +28,7 @@ type Replicator struct {
 	plugin    string
 }
 
-func New(cfg *config.Config) (*Replicator, error) {
+func New(cfg *config.Config, logger *slog.Logger) (*Replicator, error) {
 
 	repConfig, err := pgx.ParseConfig(cfg.Postgres.ReplicationDSN())
 	if err != nil {
@@ -41,6 +43,7 @@ func New(cfg *config.Config) (*Replicator, error) {
 
 	return &Replicator{
 		cfg:       cfg,
+		logger:    logger,
 		repConfig: repConfig,
 		appConfig: appConfig,
 		mapper:    mapper.New(&cfg.Mapping),
@@ -53,7 +56,7 @@ func New(cfg *config.Config) (*Replicator, error) {
 // - читает WAL
 // - обновляет кеш
 func (r *Replicator) Run(ctx context.Context, keysCh chan<- []string) error {
-	slog.Info("connecting to postgres", "dsn", r.cfg.Postgres.ReplicationDSN())
+	r.logger.Info("connecting to postgres", "dsn", r.cfg.Postgres.ReplicationDSN())
 
 	conn, err := pgx.ConnectConfig(ctx, r.repConfig)
 	if err != nil {
@@ -64,16 +67,16 @@ func (r *Replicator) Run(ctx context.Context, keysCh chan<- []string) error {
 	if err := r.ensureReplicationSlot(ctx); err != nil {
 		return fmt.Errorf("ensure replication slot: %w", err)
 	}
-	slog.Info("ensure replication slot")
+	r.logger.Info("ensure replication slot")
 
 	startLSN, err := r.getRestartLSN(ctx)
 	if err != nil {
 		return fmt.Errorf("get restart LSN: %w", err)
 	}
-	slog.Info("starting replication", "slog", r.slotName, "start_lsn", startLSN.String())
+	r.logger.Info("starting replication", "r.logger", r.slotName, "start_lsn", startLSN.String())
 
 	cfg := conn.Config()
-	slog.Debug("connection check",
+	r.logger.Debug("connection check",
 		"replication_param", cfg.RuntimeParams["replication"],
 		"host", cfg.Host,
 		"database", cfg.Database,
@@ -97,14 +100,14 @@ func (r *Replicator) Run(ctx context.Context, keysCh chan<- []string) error {
 	if err != nil {
 		return fmt.Errorf("start replication %w", err)
 	}
-	slog.Info("replication stream started", "systemid", sysident.SystemID)
+	r.logger.Info("replication stream started", "systemid", sysident.SystemID)
 
 	// основной цикл работы
 	// читаем сообщение -> обрабатываем -> подтверждаем обработку
 	for {
 		select {
 		case <-ctx.Done():
-			slog.Info("replication stopped by context")
+			r.logger.Info("replication stopped by context")
 			return ctx.Err()
 		default:
 		}
@@ -121,7 +124,7 @@ func (r *Replicator) Run(ctx context.Context, keysCh chan<- []string) error {
 			if errors.Is(err, context.Canceled) {
 				return nil
 			}
-			slog.Warn("receive message", "error", err)
+			r.logger.Warn("receive message", "error", err)
 			// TODO: нужна логика переподключения
 			continue
 		}
@@ -135,19 +138,19 @@ func (r *Replicator) Run(ctx context.Context, keysCh chan<- []string) error {
 			case pglogrepl.XLogDataByteID:
 				xld, err := pglogrepl.ParseXLogData(msg.Data[1:]) // пропускаем байт типа сообщения
 				if err != nil {
-					slog.Error("parse xlog data", "error", err)
+					r.logger.Error("parse xlog data", "error", err)
 					continue
 				}
 
 				logicalMsg, err := pglogrepl.Parse(xld.WALData)
 				if err != nil {
-					slog.Error("parse logical message", "error", err)
+					r.logger.Error("parse logical message", "error", err)
 					continue
 				}
 
 				proceeded, err := r.processLogicalMessage(ctx, logicalMsg, keysCh)
 				if err != nil {
-					slog.Error("process message", "error", err, "msg_type", fmt.Sprintf("%T", logicalMsg))
+					r.logger.Error("process message", "error", err, "msg_type", fmt.Sprintf("%T", logicalMsg))
 					// TODO: нужно что-то делать в случае ошибки обработки сообщения
 				}
 
@@ -156,13 +159,13 @@ func (r *Replicator) Run(ctx context.Context, keysCh chan<- []string) error {
 				if _, ok := logicalMsg.(*pglogrepl.CommitMessage); proceeded && ok {
 					confirmLSN := xld.WALStart + pglogrepl.LSN(len(xld.WALData))
 					if err := r.sendStandbyStatusUpdate(ctx, conn, confirmLSN); err != nil {
-						slog.Error("send standby status", "error", err)
+						r.logger.Error("send standby status", "error", err)
 					}
-					slog.Debug("confirmed LSN", "lsn", confirmLSN.String())
+					r.logger.Debug("confirmed LSN", "lsn", confirmLSN.String())
 				}
 			}
 		case *pgproto3.ErrorResponse:
-			slog.Error("postgres error response", "msg", msg.Message, "severity", msg.Severity)
+			r.logger.Error("postgres error response", "msg", msg.Message, "severity", msg.Severity)
 			return fmt.Errorf("postgres error: %s", msg.Message)
 		}
 	}
@@ -194,7 +197,7 @@ func (r *Replicator) ensureReplicationSlot(ctx context.Context) error {
 
 		if errors.Is(err, pgx.ErrNoRows) {
 			// создание слота
-			slog.Info("creating replication slot", "slot", r.slotName, "plugin", r.plugin)
+			r.logger.Info("creating replication slot", "slot", r.slotName, "plugin", r.plugin)
 			_, err = pglogrepl.CreateReplicationSlot(
 				ctx,
 				conn.PgConn(),
@@ -205,7 +208,7 @@ func (r *Replicator) ensureReplicationSlot(ctx context.Context) error {
 			if err != nil {
 				return fmt.Errorf("create slot: %w", err)
 			}
-			slog.Info("replication slot created")
+			r.logger.Info("replication slot created")
 			return nil
 		}
 
@@ -213,7 +216,7 @@ func (r *Replicator) ensureReplicationSlot(ctx context.Context) error {
 			return fmt.Errorf("check slot existence: %w", err)
 		}
 
-		slog.Info("replication slot exists", "slot", r.slotName)
+		r.logger.Info("replication slot exists", "slot", r.slotName)
 		return nil
 	})
 }
@@ -256,15 +259,15 @@ func (r *Replicator) getRestartLSN(ctx context.Context) (pglogrepl.LSN, error) {
 func (r *Replicator) processLogicalMessage(ctx context.Context, msg pglogrepl.Message, keysCh chan<- []string) (bool, error) {
 	switch msg := msg.(type) {
 	case *pglogrepl.BeginMessage:
-		slog.Debug("begin transaction", "lsn", msg.FinalLSN, "xid", msg.Xid)
+		r.logger.Debug("begin transaction", "lsn", msg.FinalLSN, "xid", msg.Xid)
 		return false, nil
 
 	case *pglogrepl.CommitMessage:
-		slog.Debug("commit transaction", "commit_lsn", msg.CommitLSN, "end_lsn", msg.TransactionEndLSN)
+		r.logger.Debug("commit transaction", "commit_lsn", msg.CommitLSN, "end_lsn", msg.TransactionEndLSN)
 		return true, nil
 
 	case *pglogrepl.RelationMessage:
-		slog.Debug("relation metadata", "name", msg.Namespace+"."+msg.RelationName, "oid", msg.RelationID)
+		r.logger.Debug("relation metadata", "name", msg.Namespace+"."+msg.RelationName, "oid", msg.RelationID)
 
 		// кешируем названия столбцов при первом обращении к ним в БД так как
 		// названия столбцов публикуются только при первой операции, а
@@ -273,24 +276,24 @@ func (r *Replicator) processLogicalMessage(ctx context.Context, msg pglogrepl.Me
 		return false, nil
 
 	case *pglogrepl.InsertMessage:
-		slog.Debug("insert message")
+		r.logger.Debug("insert message")
 		return false, nil
 
 	case *pglogrepl.UpdateMessage:
-		slog.Debug("update message")
+		r.logger.Debug("update message")
 		return r.handleRowChange(ctx, msg.RelationID, msg.NewTuple, keysCh)
 
 	case *pglogrepl.DeleteMessage:
-		slog.Debug("delete message")
+		r.logger.Debug("delete message")
 		return r.handleRowChange(ctx, msg.RelationID, msg.OldTuple, keysCh)
 
 	case *pglogrepl.LogicalDecodingMessage:
 		// пользовательское сообщение
-		slog.Debug("logical decoding message")
+		r.logger.Debug("logical decoding message")
 		return false, nil
 
 	default:
-		slog.Debug("unhandled message type", "type", fmt.Sprintf("%T", msg))
+		r.logger.Debug("unhandled message type", "type", fmt.Sprintf("%T", msg))
 		return false, nil
 	}
 }

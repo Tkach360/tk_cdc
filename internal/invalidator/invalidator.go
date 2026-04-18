@@ -13,11 +13,12 @@ import (
 )
 
 type Invalidator struct {
-	redis *redis.Client
+	redis  *redis.Client
+	logger *slog.Logger
 }
 
 // создать новый инвалидатор
-func New(cfg *config.RedisConfig) (*Invalidator, error) {
+func New(cfg *config.RedisConfig, logger *slog.Logger) (*Invalidator, error) {
 	redis := redis.NewClient(&redis.Options{
 		Addr:     cfg.Addr,
 		Password: cfg.Password,
@@ -29,7 +30,7 @@ func New(cfg *config.RedisConfig) (*Invalidator, error) {
 		return nil, fmt.Errorf("redis ping failed: %w", err)
 	}
 
-	return &Invalidator{redis}, nil
+	return &Invalidator{redis, logger}, nil
 }
 
 // инвалидировать ключи
@@ -48,7 +49,7 @@ func (i *Invalidator) Run(ctx context.Context, in <-chan []string) error {
 		select {
 		case keys, ok := <-in:
 			if !ok {
-				slog.Info("Invalidator: channel closed: exiting")
+				i.logger.Info("Invalidator: channel closed: exiting")
 				return nil
 			}
 
@@ -56,10 +57,10 @@ func (i *Invalidator) Run(ctx context.Context, in <-chan []string) error {
 				return fmt.Errorf("Invalidator: invalidate keys: %w", err)
 			}
 
-			slog.Info("Invalidator: invalidate keys", "count", len(keys))
+			i.logger.Info("Invalidator: invalidate keys", "count", len(keys))
 
 		case <-ctx.Done():
-			slog.Info("Invalidator: context cancelled, exiting")
+			i.logger.Info("Invalidator: context cancelled, exiting")
 			return ctx.Err()
 		}
 	}

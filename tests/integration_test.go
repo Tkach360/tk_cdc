@@ -18,19 +18,6 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-func TestMain(m *testing.M) {
-	// при go test -v будут выводится и логи работы программы
-	opts := &slog.HandlerOptions{
-		Level:     slog.LevelDebug,
-		AddSource: false,
-	}
-
-	handler := slog.NewTextHandler(os.Stdout, opts)
-	slog.SetDefault(slog.New(handler))
-
-	os.Exit(m.Run())
-}
-
 type ContainersConfig struct {
 	pgImage     string
 	pgAdminUser string
@@ -296,7 +283,13 @@ func (s *ContainersConfig) TestFunc(
 		t.Fatalf("incorrect test config: %v", err)
 	}
 
-	service, err := service.New(cfg)
+	opts := &slog.HandlerOptions{
+		Level:     slog.LevelDebug,
+		AddSource: false,
+	}
+
+	logger := slog.New(slog.NewTextHandler(os.Stdout, opts))
+	service, err := service.New(cfg, logger)
 	if err != nil {
 		t.Fatalf("replicator init failed: %v", err)
 	}

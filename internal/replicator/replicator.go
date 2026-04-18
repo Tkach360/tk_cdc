@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/Tkach360/tk_cdc/internal/config"
-	"github.com/Tkach360/tk_cdc/internal/invalidator"
 	"github.com/Tkach360/tk_cdc/internal/mapper"
 	"github.com/jackc/pglogrepl"
 	"github.com/jackc/pgx/v5"
@@ -19,13 +18,12 @@ import (
 )
 
 type Replicator struct {
-	cfg         *config.Config
-	repConfig   *pgx.ConnConfig
-	appConfig   *pgx.ConnConfig
-	invalidator *invalidator.Invalidator
-	mapper      *mapper.Mapper
-	slotName    string
-	plugin      string
+	cfg       *config.Config
+	repConfig *pgx.ConnConfig
+	appConfig *pgx.ConnConfig
+	mapper    *mapper.Mapper
+	slotName  string
+	plugin    string
 }
 
 func New(cfg *config.Config) (*Replicator, error) {
@@ -41,26 +39,20 @@ func New(cfg *config.Config) (*Replicator, error) {
 		return nil, fmt.Errorf("parse app postgres DSN: %w", err)
 	}
 
-	invalidator, err := invalidator.New(&cfg.Redis)
-	if err != nil {
-		return nil, fmt.Errorf("connection redis: %w", err)
-	}
-
 	return &Replicator{
-		cfg:         cfg,
-		repConfig:   repConfig,
-		appConfig:   appConfig,
-		invalidator: invalidator,
-		mapper:      mapper.New(&cfg.Mapping),
-		slotName:    cfg.Postgres.ReplicationSlot,
-		plugin:      cfg.Postgres.Plugin,
+		cfg:       cfg,
+		repConfig: repConfig,
+		appConfig: appConfig,
+		mapper:    mapper.New(&cfg.Mapping),
+		slotName:  cfg.Postgres.ReplicationSlot,
+		plugin:    cfg.Postgres.Plugin,
 	}, nil
 }
 
 // основной цикл работы replicator
 // - читает WAL
 // - обновляет кеш
-func (r *Replicator) Run(ctx context.Context) error {
+func (r *Replicator) Run(ctx context.Context, keysCh chan<- []string) error {
 	slog.Info("connecting to postgres", "dsn", r.cfg.Postgres.ReplicationDSN())
 
 	conn, err := pgx.ConnectConfig(ctx, r.repConfig)
@@ -153,7 +145,7 @@ func (r *Replicator) Run(ctx context.Context) error {
 					continue
 				}
 
-				proceeded, err := r.processLogicalMessage(ctx, logicalMsg)
+				proceeded, err := r.processLogicalMessage(ctx, logicalMsg, keysCh)
 				if err != nil {
 					slog.Error("process message", "error", err, "msg_type", fmt.Sprintf("%T", logicalMsg))
 					// TODO: нужно что-то делать в случае ошибки обработки сообщения
@@ -261,7 +253,7 @@ func (r *Replicator) getRestartLSN(ctx context.Context) (pglogrepl.LSN, error) {
 
 // обработка логического сообщения
 // возвращает признак обработки сообщения и ошибку
-func (r *Replicator) processLogicalMessage(ctx context.Context, msg pglogrepl.Message) (bool, error) {
+func (r *Replicator) processLogicalMessage(ctx context.Context, msg pglogrepl.Message, keysCh chan<- []string) (bool, error) {
 	switch msg := msg.(type) {
 	case *pglogrepl.BeginMessage:
 		slog.Debug("begin transaction", "lsn", msg.FinalLSN, "xid", msg.Xid)
@@ -286,11 +278,11 @@ func (r *Replicator) processLogicalMessage(ctx context.Context, msg pglogrepl.Me
 
 	case *pglogrepl.UpdateMessage:
 		slog.Debug("update message")
-		return r.handleRowChange(ctx, msg.RelationID, msg.NewTuple)
+		return r.handleRowChange(ctx, msg.RelationID, msg.NewTuple, keysCh)
 
 	case *pglogrepl.DeleteMessage:
 		slog.Debug("delete message")
-		return r.handleRowChange(ctx, msg.RelationID, msg.OldTuple)
+		return r.handleRowChange(ctx, msg.RelationID, msg.OldTuple, keysCh)
 
 	case *pglogrepl.LogicalDecodingMessage:
 		// пользовательское сообщение
@@ -304,23 +296,26 @@ func (r *Replicator) processLogicalMessage(ctx context.Context, msg pglogrepl.Me
 }
 
 // обработать изменение записи
-func (r *Replicator) handleRowChange(ctx context.Context, relID uint32, tuple *pglogrepl.TupleData) (bool, error) {
+func (r *Replicator) handleRowChange(ctx context.Context, relID uint32, tuple *pglogrepl.TupleData, out chan<- []string) (bool, error) {
+	if ctx.Err() != nil {
+		return false, ctx.Err()
+	}
+
 	if tuple == nil {
-		// TOAST-значения или другие случаи, когда данных нет
 		return false, nil
 	}
 
-	// получаем ключи redis, которые являются закешированными записями указанного отношения
 	keys := r.mapper.GetKeys(relID, tuple)
 	if len(keys) == 0 {
 		return false, nil
 	}
 
-	r.invalidator.Invalidate(ctx, keys)
-
-	// TODO: может каким-то образом доставать имя отношения чтобы логи были более понятными?
-	slog.Info("invalidated cache keys", "relID", relID, "keys_count", len(keys))
-	return true, nil
+	select {
+	case out <- keys:
+		return true, nil
+	case <-ctx.Done():
+		return false, ctx.Err()
+	}
 }
 
 // отправить статус ожидания

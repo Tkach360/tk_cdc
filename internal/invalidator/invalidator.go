@@ -6,6 +6,7 @@ package invalidator
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"github.com/Tkach360/tk_cdc/internal/config"
 	"github.com/redis/go-redis/v9"
@@ -39,4 +40,25 @@ func (i *Invalidator) Invalidate(ctx context.Context, keys []string) error {
 
 	// TODO: нужно делать повторные попытки удалить если соединение с redis было прервано
 	return nil
+}
+
+// запуск цикла инвалидации
+func (i *Invalidator) Run(ctx context.Context, in <-chan []string) error {
+	for {
+		select {
+		case keys, ok := <-in:
+			if !ok {
+				slog.Info("Invalidator: channel closed: exiting")
+				return nil
+			}
+
+			if err := i.Invalidate(ctx, keys); err != nil {
+				return fmt.Errorf("Invalidator: invalidate keys: %w", err)
+			}
+
+		case <-ctx.Done():
+			slog.Info("Invalidator: context cancelled, exiting")
+			return ctx.Err()
+		}
+	}
 }

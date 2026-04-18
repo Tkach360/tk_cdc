@@ -27,18 +27,14 @@ func main() {
 	}
 	slog.Info("starting tk_cdc")
 
-	rep, err := replicator.New(cfg)
+	svc, err := service.New(cfg)
 	if err != nil {
-		slog.Error("failed to creating replicator", "error", err)
+		slog.Error("init failed", "err", err)
 		os.Exit(1)
 	}
 
-	go func() {
-		if err := rep.Run(ctx); err != nil {
-			slog.Error("replicator error", "error", err)
-		}
-	}()
-
-	<-ctx.Done()
-	slog.Info("shutting down gracefully")
+	if err := svc.Run(ctx); err != nil && err != context.Canceled {
+		slog.Error("service failed", "err", err)
+		os.Exit(1)
+	}
 }

@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/Tkach360/tk_cdc/internal/config"
-	"github.com/Tkach360/tk_cdc/internal/replicator"
+	"github.com/Tkach360/tk_cdc/internal/service"
 	"github.com/docker/go-connections/nat"
 	"github.com/jackc/pgx/v5"
 	"github.com/redis/go-redis/v9"
@@ -296,7 +296,7 @@ func (s *ContainersConfig) TestFunc(
 		t.Fatalf("incorrect test config: %v", err)
 	}
 
-	rep, err := replicator.New(cfg)
+	service, err := service.New(cfg)
 	if err != nil {
 		t.Fatalf("replicator init failed: %v", err)
 	}
@@ -306,7 +306,7 @@ func (s *ContainersConfig) TestFunc(
 
 	repErrCh := make(chan error, 1)
 	go func() {
-		repErrCh <- rep.Run(repCtx)
+		repErrCh <- service.Run(repCtx)
 	}()
 	defer repCancel()
 

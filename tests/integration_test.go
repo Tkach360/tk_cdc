@@ -42,6 +42,9 @@ type ContainersConfig struct {
 
 	pgContainer testcontainers.Container
 	rdContainer testcontainers.Container
+
+	// функция очистки данных между тестами, отрабатывает в конце TestFunc
+	clearFunc func(ctx context.Context, pgConn *pgx.Conn, rdConn *redis.Client) error
 }
 
 func NewContainersConfig(ctx context.Context) (*ContainersConfig, error) {
@@ -120,6 +123,12 @@ mapping:
    - table: "users"
      key_pattern: "user:{id}"
 `
+	}
+
+	if s.clearFunc == nil {
+		s.clearFunc = func(ctx context.Context, pgConn *pgx.Conn, rdConn *redis.Client) error {
+			return nil
+		}
 	}
 }
 
@@ -331,6 +340,10 @@ func (s *ContainersConfig) TestFunc(
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("replicator did not stop gracefully in time")
+	}
+
+	if err := s.clearFunc(ctx, pg, rdb); err != nil {
+		t.Fatalf("clearing after test: %v", err)
 	}
 }
 
@@ -599,6 +612,19 @@ func TestCDC_CacheInvalidation(t *testing.T) {
 	initializer, err := NewContainersConfig(ctx)
 	if err != nil {
 		t.Fatalf("Containers config: %v", err)
+	}
+	initializer.clearFunc = func(ctx context.Context, pgConn *pgx.Conn, rdConn *redis.Client) error {
+		// удаляю таблицу, чтобы тесты не влияли друг на друга
+		_, err = pgConn.Exec(ctx, "DROP TABLE users;")
+		if err != nil {
+			t.Fatalf("drop table: %v", err)
+		}
+		if err != nil {
+			return err
+		}
+
+		// также очищаю redis
+		return rdConn.FlushAll(ctx).Err()
 	}
 
 	for _, tt := range tests {

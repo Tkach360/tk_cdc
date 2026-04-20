@@ -14,6 +14,7 @@ import (
 	"github.com/docker/go-connections/nat"
 	"github.com/jackc/pgx/v5"
 	"github.com/redis/go-redis/v9"
+	"github.com/stretchr/testify/assert"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
@@ -333,37 +334,38 @@ func (s *ContainersConfig) TestFunc(
 	}
 }
 
-// опрашивать redis до удаления ключа или таймаута
-func waitForRedisKeys(ctx context.Context, t *testing.T, rdb *redis.Client, keys []string, timeout time.Duration) bool {
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		select {
-		case <-ctx.Done():
-			return false
-		default:
-		}
-
-		allMissing := true
+func checkNoExistsKeys(t *testing.T, rdb *redis.Client, keys []string, timeout time.Duration) {
+	assert.Eventually(t, func() bool {
 		for _, key := range keys {
-			exists, err := rdb.Exists(ctx, key).Result()
+			exists, err := rdb.Exists(context.Background(), key).Result()
 			if err != nil {
-				t.Logf("redis check error for key %s: %v", key, err)
-				allMissing = false
-				break
+				t.Logf("Redis error: %v", err)
+				return false
 			}
 			if exists > 0 {
-				allMissing = false
-				break
+				t.Logf("Key still exists: %s", key)
+				return false
 			}
 		}
+		return true
+	}, timeout, 100*time.Millisecond, "Keys were not deleted within %v", timeout)
+}
 
-		if allMissing {
-			return true
+func checkExistsKeys(t *testing.T, rdb *redis.Client, keys []string, timeout time.Duration) {
+	assert.Eventually(t, func() bool {
+		for _, key := range keys {
+			exists, err := rdb.Exists(context.Background(), key).Result()
+			if err != nil {
+				t.Logf("Redis error: %v", err)
+				return false
+			}
+			if exists == 0 {
+				t.Logf("Key not exists: %s", key)
+				return true
+			}
 		}
-
-		time.Sleep(100 * time.Millisecond)
-	}
-	return false
+		return true
+	}, timeout, 100*time.Millisecond, "Keys were not deleted within %v", timeout)
 }
 
 func TestCDC_CacheInvalidation(t *testing.T) {
@@ -409,10 +411,7 @@ func TestCDC_CacheInvalidation(t *testing.T) {
 			},
 			checkFunc: func(ctx context.Context, t *testing.T, rdConn *redis.Client) {
 				// так как CDC асинхронный нужно подождать
-				deleted := waitForRedisKeys(ctx, t, rdConn, []string{"user:1"}, 1*time.Second)
-				if !deleted {
-					t.Fatal("Redis key 'user:1' was NOT deleted after UPDATE")
-				}
+				checkNoExistsKeys(t, rdConn, []string{"user:1"}, 1*time.Second)
 			},
 		},
 		{
@@ -448,10 +447,7 @@ func TestCDC_CacheInvalidation(t *testing.T) {
 				}
 			},
 			checkFunc: func(ctx context.Context, t *testing.T, rdConn *redis.Client) {
-				deleted := waitForRedisKeys(ctx, t, rdConn, []string{"user:1"}, 1*time.Second)
-				if !deleted {
-					t.Fatal("Redis key 'user:1' was NOT deleted after UPDATE")
-				}
+				checkNoExistsKeys(t, rdConn, []string{"user:1"}, 1*time.Second)
 			},
 		},
 		{

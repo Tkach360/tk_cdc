@@ -410,7 +410,6 @@ func TestCDC_CacheInvalidation(t *testing.T) {
 				}
 			},
 			checkFunc: func(ctx context.Context, t *testing.T, rdConn *redis.Client) {
-				// так как CDC асинхронный нужно подождать
 				checkNoExistsKeys(t, rdConn, []string{"user:1"}, 1*time.Second)
 			},
 		},

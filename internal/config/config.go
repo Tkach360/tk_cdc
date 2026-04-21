@@ -44,6 +44,7 @@ func (p *PostgresConfig) ReplicationDSN() string {
 
 type RedisConfig struct {
 	Addr         string `yaml:"addr"`
+	User         string `yaml:"user"`
 	Password     string `yaml:"password"`
 	DB           int    `yaml:"db"`
 	QMaxAttempts int    `yaml:"query_max_attempts"`

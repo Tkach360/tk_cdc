@@ -28,6 +28,7 @@ type ContainersConfig struct {
 
 	rdImage string
 	rdPort  nat.Port
+	rdUser  string
 	rdPass  string
 	rdDB    int
 
@@ -80,6 +81,9 @@ func insertDefaultFields(s *ContainersConfig) {
 	if s.rdPort == "" {
 		s.rdPort = nat.Port("6379")
 	}
+	if s.rdUser == "" {
+		s.rdUser = "default_redis_user"
+	}
 	if s.rdPass == "" {
 		s.rdPass = "default_redis_pass"
 	}
@@ -115,6 +119,7 @@ postgres:
   publication_names: "default_publNames"
 redis:
   addr: "localhost:6379"
+  user: "default_redis_user"
   password: "default_redis_pass"
   db: 0
   query_max_attempts: 3
@@ -194,11 +199,42 @@ func (s *ContainersConfig) createPostgresContainer(ctx context.Context) (testcon
 
 // создать контейнер с redis
 func (s *ContainersConfig) createRedisContainer(ctx context.Context) (testcontainers.Container, error) {
-	// запускаем Redis
+
+	configContent := fmt.Sprintf(`
+# Отключаем default пользователя (опционально)
+user default off
+
+# Создаем кастомного пользователя
+user %s on >%s ~* &* +@all
+`, s.rdUser, s.rdPass)
+
+	// Создаем временный файл
+	tmpFile, err := os.CreateTemp("", "redis-config-*.conf")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create temp file: %w", err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	if _, err := tmpFile.WriteString(configContent); err != nil {
+		return nil, fmt.Errorf("failed to write config: %w", err)
+	}
+	tmpFile.Close()
+
 	redisReq := testcontainers.ContainerRequest{
 		Image:        s.rdImage,
 		ExposedPorts: []string{s.rdPort.Port() + "/tcp"},
-		WaitingFor:   wait.ForLog("Ready to accept connections"),
+		Files: []testcontainers.ContainerFile{
+			{
+				HostFilePath:      tmpFile.Name(),
+				ContainerFilePath: "/usr/local/etc/redis/redis.conf",
+				FileMode:          0644,
+			},
+		},
+		Cmd: []string{
+			"redis-server",
+			"/usr/local/etc/redis/redis.conf",
+		},
+		WaitingFor: wait.ForLog("Ready to accept connections"),
 	}
 
 	redisContainer, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
@@ -286,7 +322,7 @@ func (s *ContainersConfig) TestFunc(
 	rdPort, _ := rdContainer.MappedPort(ctx, s.rdPort)
 	rdAddr := fmt.Sprintf("%s:%s", rdHost, rdPort.Port())
 
-	rdb := redis.NewClient(&redis.Options{Addr: rdAddr, Password: s.rdPass, DB: s.rdDB})
+	rdb := redis.NewClient(&redis.Options{Addr: rdAddr, Username: s.rdUser, Password: s.rdPass, DB: s.rdDB})
 	defer rdb.Close()
 	pg, _ := pgx.Connect(ctx, pgAdminDSN)
 	defer pg.Close(ctx)

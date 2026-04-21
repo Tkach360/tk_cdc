@@ -22,6 +22,8 @@ postgres:
 
 redis:
   addr: "{REDIS_ADDR:-localhost:6379}"
+
+  user: "${REDIS_USER:-}"
   password: "${REDIS_PASSWORD:-}"
 
   # номер логической базы данных в Redis

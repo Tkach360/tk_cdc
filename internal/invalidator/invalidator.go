@@ -29,6 +29,7 @@ func (i *Invalidator) GetQueryDelay() time.Duration {
 func New(cfg *config.RedisConfig, logger *slog.Logger) (*Invalidator, error) {
 	redis := redis.NewClient(&redis.Options{
 		Addr:     cfg.Addr,
+		Username: cfg.User,
 		Password: cfg.Password,
 		DB:       cfg.DB,
 		// TODO: нужно добавить таймаутов

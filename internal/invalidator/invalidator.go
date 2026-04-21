@@ -49,18 +49,26 @@ func (i *Invalidator) Invalidate(ctx context.Context, keys []string) error {
 
 	// TODO: сделать sentinel error которая будет хранить неинвалидированный ключ
 	var lastErr error
-	for attempt := 0; attempt <= i.maxAttems; attempt += 1 {
+	for attempt := 0; attempt <= i.maxAttems; attempt++ {
+
 		if err := i.redis.Unlink(ctx, keys...).Err(); err == nil {
 			return nil
 		} else {
 			lastErr = err
 			i.logger.Error("retrying invalidation", "attempt", attempt, "err", err)
-			time.Sleep(i.GetQueryDelay())
-			continue
+		}
+
+		if attempt == i.maxAttems {
+			break
+		}
+
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("invalidation canceled: %w", ctx.Err())
+		case <-time.After(i.GetQueryDelay()):
 		}
 	}
-
-	return fmt.Errorf("invalidation failed: %w, att: %d", lastErr, i.maxAttems)
+	return fmt.Errorf("invalidation failed: %w", lastErr)
 }
 
 // запуск цикла инвалидации

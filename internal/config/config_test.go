@@ -33,7 +33,9 @@ func TestConfigValidate(t *testing.T) {
 					PublicationNames: "",
 				},
 				Redis: RedisConfig{
-					Addr: "localhost:6379",
+					Addr:         "localhost:6379",
+					QMaxAttempts: 3,
+					QDelay:       10,
 				},
 			},
 			checkErr: func(err error) bool {
@@ -56,7 +58,9 @@ func TestConfigValidate(t *testing.T) {
 					PublicationNames: "",
 				},
 				Redis: RedisConfig{
-					Addr: "localhost:6379",
+					Addr:         "localhost:6379",
+					QMaxAttempts: 3,
+					QDelay:       10,
 				},
 			},
 			checkErr: func(err error) bool {
@@ -79,7 +83,9 @@ func TestConfigValidate(t *testing.T) {
 					PublicationNames: "",
 				},
 				Redis: RedisConfig{
-					Addr: "localhost:6379",
+					Addr:         "localhost:6379",
+					QMaxAttempts: 3,
+					QDelay:       10,
 				},
 			},
 			checkErr: func(err error) bool {
@@ -102,7 +108,9 @@ func TestConfigValidate(t *testing.T) {
 					PublicationNames: "",
 				},
 				Redis: RedisConfig{
-					Addr: "localhost:6379",
+					Addr:         "localhost:6379",
+					QMaxAttempts: 3,
+					QDelay:       10,
 				},
 			},
 			checkErr: func(err error) bool {
@@ -125,7 +133,9 @@ func TestConfigValidate(t *testing.T) {
 					PublicationNames: "",
 				},
 				Redis: RedisConfig{
-					Addr: "localhost:6379",
+					Addr:         "localhost:6379",
+					QMaxAttempts: 3,
+					QDelay:       10,
 				},
 			},
 			checkErr: func(err error) bool {
@@ -148,7 +158,9 @@ func TestConfigValidate(t *testing.T) {
 					PublicationNames: "",
 				},
 				Redis: RedisConfig{
-					Addr: "localhost:6379",
+					Addr:         "localhost:6379",
+					QMaxAttempts: 3,
+					QDelay:       10,
 				},
 			},
 			checkErr: func(err error) bool {
@@ -171,7 +183,9 @@ func TestConfigValidate(t *testing.T) {
 					PublicationNames: "",
 				},
 				Redis: RedisConfig{
-					Addr: "localhost:6379",
+					Addr:         "localhost:6379",
+					QMaxAttempts: 3,
+					QDelay:       10,
 				},
 			},
 			checkErr: func(err error) bool {
@@ -194,7 +208,9 @@ func TestConfigValidate(t *testing.T) {
 					PublicationNames: "",
 				},
 				Redis: RedisConfig{
-					Addr: "localhost:6379",
+					Addr:         "localhost:6379",
+					QMaxAttempts: 3,
+					QDelay:       10,
 				},
 			},
 			checkErr: func(err error) bool {
@@ -216,12 +232,137 @@ func TestConfigValidate(t *testing.T) {
 					PublicationNames: "my_publication",
 				},
 				Redis: RedisConfig{
-					Addr: "",
+					Addr:         "",
+					QMaxAttempts: 3,
+					QDelay:       10,
 				},
 			},
 			checkErr: func(err error) bool {
 				var e *RequiredError
 				return errors.As(err, &e)
+			},
+		},
+		{
+			name: "negative query_max_attempts",
+			config: &Config{
+				Postgres: PostgresConfig{
+					Addr:             "localhost:5432",
+					DB:               "testdb",
+					ReplicationUser:  "repl_user",
+					ReplicationPass:  "repl_pass",
+					AppUser:          "app_user",
+					AppPass:          "app_pass",
+					ReplicationSlot:  "test_slot",
+					Plugin:           "pgoutput",
+					PublicationNames: "my_publication",
+				},
+				Redis: RedisConfig{
+					Addr:         "localhost:6379",
+					QMaxAttempts: -1,
+					QDelay:       10,
+				},
+			},
+			checkErr: func(err error) bool {
+				var e *InvalidValueError
+				return errors.As(err, &e)
+			},
+		},
+		{
+			name: "negative query_delay_ms",
+			config: &Config{
+				Postgres: PostgresConfig{
+					Addr:             "localhost:5432",
+					DB:               "testdb",
+					ReplicationUser:  "repl_user",
+					ReplicationPass:  "repl_pass",
+					AppUser:          "app_user",
+					AppPass:          "app_pass",
+					ReplicationSlot:  "test_slot",
+					Plugin:           "pgoutput",
+					PublicationNames: "my_publication",
+				},
+				Redis: RedisConfig{
+					Addr:         "localhost:6379",
+					QMaxAttempts: 3,
+					QDelay:       -5,
+				},
+			},
+			checkErr: func(err error) bool {
+				var e *InvalidValueError
+				return errors.As(err, &e)
+			},
+		},
+		{
+			name: "zero query_max_attempts",
+			config: &Config{
+				Postgres: PostgresConfig{
+					Addr:             "localhost:5432",
+					DB:               "testdb",
+					ReplicationUser:  "repl_user",
+					ReplicationPass:  "repl_pass",
+					AppUser:          "app_user",
+					AppPass:          "app_pass",
+					ReplicationSlot:  "test_slot",
+					Plugin:           "pgoutput",
+					PublicationNames: "my_publication",
+				},
+				Redis: RedisConfig{
+					Addr:         "localhost:6379",
+					QMaxAttempts: 0,
+					QDelay:       10,
+				},
+			},
+			checkErr: func(err error) bool {
+				var e *InvalidValueError
+				return errors.As(err, &e)
+			},
+		},
+		{
+			name: "query_max_attempts = 1",
+			config: &Config{
+				Postgres: PostgresConfig{
+					Addr:             "localhost:5432",
+					DB:               "testdb",
+					ReplicationUser:  "repl_user",
+					ReplicationPass:  "repl_pass",
+					AppUser:          "app_user",
+					AppPass:          "app_pass",
+					ReplicationSlot:  "test_slot",
+					Plugin:           "pgoutput",
+					PublicationNames: "my_publication",
+				},
+				Redis: RedisConfig{
+					Addr:         "localhost:6379",
+					QMaxAttempts: 1,
+					QDelay:       10,
+				},
+			},
+			checkErr: func(err error) bool {
+				return err == nil
+			},
+		},
+		{
+			name: "zero query_delay_ms",
+			config: &Config{
+				Postgres: PostgresConfig{
+					Addr:             "localhost:5432",
+					DB:               "testdb",
+					ReplicationUser:  "repl_user",
+					ReplicationPass:  "repl_pass",
+					AppUser:          "app_user",
+					AppPass:          "app_pass",
+					ReplicationSlot:  "test_slot",
+					Plugin:           "pgoutput",
+					PublicationNames: "my_publication",
+				},
+				Redis: RedisConfig{
+					Addr:         "localhost:6379",
+					QMaxAttempts: 3,
+					QDelay:       0,
+				},
+			},
+			checkErr: func(err error) bool {
+				return err == nil
 			},
 		},
 		{
@@ -239,7 +380,9 @@ func TestConfigValidate(t *testing.T) {
 					PublicationNames: "",
 				},
 				Redis: RedisConfig{
-					Addr: "localhost:6379",
+					Addr:         "localhost:6379",
+					QMaxAttempts: 3,
+					QDelay:       10,
 				},
 			},
 			checkErr: func(err error) bool {
@@ -262,7 +405,9 @@ func TestConfigValidate(t *testing.T) {
 					PublicationNames: "my_publication",
 				},
 				Redis: RedisConfig{
-					Addr: "localhost:6379",
+					Addr:         "localhost:6379",
+					QMaxAttempts: 3,
+					QDelay:       10,
 				},
 				Mapping: mapper.MappingConfig{
 					DefaultSchema: "public",
@@ -300,7 +445,9 @@ func TestConfigValidate(t *testing.T) {
 					PublicationNames: "my_publication",
 				},
 				Redis: RedisConfig{
-					Addr: "localhost:6379",
+					Addr:         "localhost:6379",
+					QMaxAttempts: 3,
+					QDelay:       10,
 				},
 				Mapping: mapper.MappingConfig{
 					DefaultSchema: "public",
@@ -335,7 +482,9 @@ func TestConfigValidate(t *testing.T) {
 					PublicationNames: "my_publication",
 				},
 				Redis: RedisConfig{
-					Addr: "localhost:6379",
+					Addr:         "localhost:6379",
+					QMaxAttempts: 3,
+					QDelay:       10,
 				},
 				Mapping: mapper.MappingConfig{
 					DefaultSchema: "public",
@@ -370,7 +519,9 @@ func TestConfigValidate(t *testing.T) {
 					PublicationNames: "my_publication",
 				},
 				Redis: RedisConfig{
-					Addr: "localhost:6379",
+					Addr:         "localhost:6379",
+					QMaxAttempts: 5,
+					QDelay:       100,
 				},
 				Mapping: mapper.MappingConfig{
 					DefaultSchema: "public",
@@ -401,7 +552,9 @@ func TestConfigValidate(t *testing.T) {
 					PublicationNames: "pub1,pub2,pub3",
 				},
 				Redis: RedisConfig{
-					Addr: "localhost:6379",
+					Addr:         "localhost:6379",
+					QMaxAttempts: 3,
+					QDelay:       10,
 				},
 				Mapping: mapper.MappingConfig{
 					DefaultSchema: "public",
@@ -458,6 +611,8 @@ postgres:
   publication_names: "my_pub"
 redis:
   addr: "localhost:6379"
+  query_max_attempts: 3
+  query_delay_ms: 10
 mapping:
   default_schema: "custom"
   rules:
@@ -479,6 +634,8 @@ mapping:
 				assert.Equal(t, "users", rule.Table.Name)
 				assert.Equal(t, "user:{id}", rule.KeyPattern)
 				assert.Equal(t, "my_pub", cfg.Postgres.PublicationNames)
+				assert.Equal(t, 3, cfg.Redis.QMaxAttempts)
+				assert.Equal(t, 10, cfg.Redis.QDelay)
 			},
 		},
 		{
@@ -496,6 +653,8 @@ postgres:
   publication_names: "orders_pub"
 redis:
   addr: "localhost:6379"
+  query_max_attempts: 5
+  query_delay_ms: 50
 mapping:
   rules:
     - table: "orders"
@@ -508,6 +667,8 @@ mapping:
 				assert.Equal(t, "public", rule.Table.Schema)
 				assert.Equal(t, "orders", rule.Table.Name)
 				assert.Equal(t, "orders_pub", cfg.Postgres.PublicationNames)
+				assert.Equal(t, 5, cfg.Redis.QMaxAttempts)
+				assert.Equal(t, 50, cfg.Redis.QDelay)
 			},
 		},
 		{
@@ -525,6 +686,8 @@ postgres:
   publication_names: "test_pub"
 redis:
   addr: "localhost:6379"
+  query_max_attempts: 7
+  query_delay_ms: 200
 mapping:
   default_schema: "custom"
   rules:
@@ -537,6 +700,8 @@ mapping:
 				assert.Equal(t, "explicit", rule.Table.Schema)
 				assert.Equal(t, "users", rule.Table.Name)
 				assert.Equal(t, "test_pub", cfg.Postgres.PublicationNames)
+				assert.Equal(t, 7, cfg.Redis.QMaxAttempts)
+				assert.Equal(t, 200, cfg.Redis.QDelay)
 			},
 		},
 		{
@@ -554,6 +719,8 @@ postgres:
   publication_names: "temp_pub"
 redis:
   addr: "localhost:6379"
+  query_max_attempts: 3
+  query_delay_ms: 100
 mapping:
   default_schema: "custom"
   rules:
@@ -566,6 +733,8 @@ mapping:
 				assert.Equal(t, "custom", rule.Table.Schema)
 				assert.Equal(t, "temp", rule.Table.Name)
 				assert.Equal(t, "temp_pub", cfg.Postgres.PublicationNames)
+				assert.Equal(t, 3, cfg.Redis.QMaxAttempts)
+				assert.Equal(t, 100, cfg.Redis.QDelay)
 			},
 		},
 		{
@@ -582,6 +751,8 @@ postgres:
   publication_names: "my_pub"
 redis:
   addr: "localhost:6379"
+  query_max_attempts: 3
+  query_delay_ms: 10
 mapping:
   rules:
     - table: "users"
@@ -603,6 +774,8 @@ postgres:
   publication_names: "my_pub"
 redis:
   addr: "localhost:6379"
+  query_max_attempts: 3
+  query_delay_ms: 10
 mapping:
   rules:
     - table: "users"
@@ -624,6 +797,8 @@ postgres:
   publication_names: "my_pub"
 redis:
   addr: "localhost:6379"
+  query_max_attempts: 3
+  query_delay_ms: 10
 mapping:
   rules:
     - table: "users"
@@ -646,6 +821,8 @@ postgres:
   publication_names: "my_pub"
 redis:
   db: 0
+  query_max_attempts: 3
+  query_delay_ms: 10
 mapping:
   rules:
     - table: "users"
@@ -668,6 +845,8 @@ postgres:
   publication_names: "my_pub"
 redis:
   addr: "localhost:6379"
+  query_max_attempts: 3
+  query_delay_ms: 10
 mapping:
   rules:
     - table: "users"
@@ -689,6 +868,8 @@ postgres:
   plugin: "pgoutput"
 redis:
   addr: "localhost:6379"
+  query_max_attempts: 3
+  query_delay_ms: 10
 mapping:
   rules:
     - table: "users"
@@ -711,6 +892,8 @@ postgres:
   publication_names: "my_pub"
 redis:
   addr: "localhost:6379"
+  query_max_attempts: 3
+  query_delay_ms: 10
 mapping:
   rules:
     - table: ""
@@ -733,6 +916,8 @@ postgres:
   publication_names: "my_pub"
 redis:
   addr: "localhost:6379"
+  query_max_attempts: 3
+  query_delay_ms: 10
 mapping:
   rules:
     - table: "users"
@@ -755,6 +940,8 @@ postgres:
   publication_names: "my_pub"
 redis:
   addr: "localhost:6379"
+  query_max_attempts: 3
+  query_delay_ms: 10
 mapping:
   rules:
     - table: "users"
@@ -777,21 +964,25 @@ postgres:
   publication_names: "${PG_PUBLICATIONS}"
 redis:
   addr: "${REDIS_ADDR}"
+  query_max_attempts: ${REDIS_MAX_ATTEMPTS}
+  query_delay_ms: ${REDIS_DELAY_MS}
 mapping:
   rules:
     - table: "users"
       key_pattern: "user:{id}"
 `,
 			env: map[string]string{
-				"POSTGRES_ADDR":   "localhost:5432",
-				"POSTGRES_DB":     "testdb",
-				"PG_REPL_USER":    "repl_user",
-				"PG_REPL_PASS":    "repl_pass",
-				"PG_APP_USER":     "app_user",
-				"PG_APP_PASS":     "app_pass",
-				"PG_SLOT":         "test_slot",
-				"REDIS_ADDR":      "redis:6379",
-				"PG_PUBLICATIONS": "env_pub1,env_pub2",
+				"POSTGRES_ADDR":      "localhost:5432",
+				"POSTGRES_DB":        "testdb",
+				"PG_REPL_USER":       "repl_user",
+				"PG_REPL_PASS":       "repl_pass",
+				"PG_APP_USER":        "app_user",
+				"PG_APP_PASS":        "app_pass",
+				"PG_SLOT":            "test_slot",
+				"REDIS_ADDR":         "redis:6379",
+				"PG_PUBLICATIONS":    "env_pub1,env_pub2",
+				"REDIS_MAX_ATTEMPTS": "5",
+				"REDIS_DELAY_MS":     "150",
 			},
 			wantErr: false,
 			checkFunc: func(t *testing.T, cfg *Config) {
@@ -804,6 +995,8 @@ mapping:
 				assert.Equal(t, "test_slot", cfg.Postgres.ReplicationSlot)
 				assert.Equal(t, "redis:6379", cfg.Redis.Addr)
 				assert.Equal(t, "env_pub1,env_pub2", cfg.Postgres.PublicationNames)
+				assert.Equal(t, 5, cfg.Redis.QMaxAttempts)
+				assert.Equal(t, 150, cfg.Redis.QDelay)
 			},
 		},
 		{
@@ -821,6 +1014,8 @@ postgres:
   publication_names: "multi_pub"
 redis:
   addr: "localhost:6379"
+  query_max_attempts: 3
+  query_delay_ms: 10
 mapping:
   default_schema: "custom"
   rules:
@@ -855,6 +1050,8 @@ mapping:
 				assert.Equal(t, "event:{event_id}", cfg.Mapping.Rules[3].KeyPattern)
 
 				assert.Equal(t, "multi_pub", cfg.Postgres.PublicationNames)
+				assert.Equal(t, 3, cfg.Redis.QMaxAttempts)
+				assert.Equal(t, 10, cfg.Redis.QDelay)
 			},
 		},
 		{
@@ -872,6 +1069,8 @@ postgres:
   publication_names: "empty_rules_pub"
 redis:
   addr: "localhost:6379"
+  query_max_attempts: 3
+  query_delay_ms: 10
 mapping:
   default_schema: "public"
   rules: []
@@ -881,6 +1080,8 @@ mapping:
 				assert.Equal(t, "public", cfg.Mapping.DefaultSchema)
 				assert.Empty(t, cfg.Mapping.Rules)
 				assert.Equal(t, "empty_rules_pub", cfg.Postgres.PublicationNames)
+				assert.Equal(t, 3, cfg.Redis.QMaxAttempts)
+				assert.Equal(t, 10, cfg.Redis.QDelay)
 			},
 		},
 		{
@@ -898,6 +1099,8 @@ postgres:
   publication_names: "minimal_pub"
 redis:
   addr: "localhost:6379"
+  query_max_attempts: 3
+  query_delay_ms: 10
 mapping:
   rules: []
 `,
@@ -906,6 +1109,87 @@ mapping:
 				assert.Equal(t, "public", cfg.Mapping.DefaultSchema)
 				assert.Empty(t, cfg.Mapping.Rules)
 				assert.Equal(t, "minimal_pub", cfg.Postgres.PublicationNames)
+				assert.Equal(t, 3, cfg.Redis.QMaxAttempts)
+				assert.Equal(t, 10, cfg.Redis.QDelay)
+			},
+		},
+		{
+			name: "negative query_max_attempts in yaml",
+			yamlContent: `
+postgres:
+  addr: "localhost:5432"
+  db: "testdb"
+  replication_user: "repl_user"
+  replication_pass: "repl_pass"
+  app_user: "app_user"
+  app_pass: "app_pass"
+  replication_slot: "slot1"
+  plugin: "pgoutput"
+  publication_names: "my_pub"
+redis:
+  addr: "localhost:6379"
+  query_max_attempts: -3
+  query_delay_ms: 10
+mapping:
+  default_schema: "custom"
+  rules:
+    - table: "users"
+      key_pattern: "user:{id}"
+`,
+			wantErr: true,
+		},
+		{
+			name: "negative query_delay_ms in yaml",
+			yamlContent: `
+postgres:
+  addr: "localhost:5432"
+  db: "testdb"
+  replication_user: "repl_user"
+  replication_pass: "repl_pass"
+  app_user: "app_user"
+  app_pass: "app_pass"
+  replication_slot: "slot1"
+  plugin: "pgoutput"
+  publication_names: "my_pub"
+redis:
+  addr: "localhost:6379"
+  query_max_attempts: 3
+  query_delay_ms: -10
+mapping:
+  default_schema: "custom"
+  rules:
+    - table: "users"
+      key_pattern: "user:{id}"
+`,
+			wantErr: true,
+		},
+		{
+			name: "custom retrying invalidation values",
+			yamlContent: `
+postgres:
+  addr: "localhost:5432"
+  db: "testdb"
+  replication_user: "repl_user"
+  replication_pass: "repl_pass"
+  app_user: "app_user"
+  app_pass: "app_pass"
+  replication_slot: "slot1"
+  plugin: "pgoutput"
+  publication_names: "my_pub"
+redis:
+  addr: "localhost:6379"
+  query_max_attempts: 10
+  query_delay_ms: 500
+mapping:
+  default_schema: "custom"
+  rules:
+    - table: "users"
+      key_pattern: "user:{id}"
+`,
+			wantErr: false,
+			checkFunc: func(t *testing.T, cfg *Config) {
+				assert.Equal(t, 10, cfg.Redis.QMaxAttempts)
+				assert.Equal(t, 500, cfg.Redis.QDelay)
 			},
 		},
 	}

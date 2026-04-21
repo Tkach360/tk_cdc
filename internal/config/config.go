@@ -101,9 +101,11 @@ func (c *Config) validate() error {
 	if c.Redis.Addr == "" {
 		return &RequiredError{"redis.addr"}
 	}
-	if c.Redis.QMaxAttempts <= 0 {
-		// TODO: выделить ошибку и обрабатывать её
-		return fmt.Errorf("query_max_attempts must be greater 0, have: %d", c.Redis.QMaxAttempts)
+	if c.Redis.QMaxAttempts < 1 {
+		return &InvalidValueError{"query_max_attempts must be >= 1", c.Redis.QMaxAttempts}
+	}
+	if c.Redis.QDelay < 0 {
+		return &InvalidValueError{"query_delay_ms must be >= 0", c.Redis.QMaxAttempts}
 	}
 
 	for i, rule := range c.Mapping.Rules {

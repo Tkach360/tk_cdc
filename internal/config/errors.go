@@ -32,3 +32,12 @@ func (e *MappingError) Error() string {
 func (e *MappingError) Unwrap() error {
 	return e.Err
 }
+
+type InvalidValueError struct {
+	condition string
+	value     any
+}
+
+func (e *InvalidValueError) Error() string {
+	return fmt.Sprintf("%s, have: %v", e.condition, e.value)
+}

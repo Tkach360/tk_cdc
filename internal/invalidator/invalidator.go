@@ -49,7 +49,7 @@ func (i *Invalidator) Invalidate(ctx context.Context, keys []string) error {
 
 	// TODO: сделать sentinel error которая будет хранить неинвалидированный ключ
 	var lastErr error
-	for attempt := 1; attempt <= i.maxAttems; attempt += 1 {
+	for attempt := 0; attempt <= i.maxAttems; attempt += 1 {
 		if err := i.redis.Unlink(ctx, keys...).Err(); err == nil {
 			return nil
 		} else {

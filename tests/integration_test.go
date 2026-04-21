@@ -117,6 +117,8 @@ redis:
   addr: "localhost:6379"
   password: "default_redis_pass"
   db: 0
+  query_max_attempts: 3
+  query_delay_ms: 10
 mapping:
   default_schema: "public"
   rules:

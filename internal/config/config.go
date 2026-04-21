@@ -43,9 +43,11 @@ func (p *PostgresConfig) ReplicationDSN() string {
 }
 
 type RedisConfig struct {
-	Addr     string `yaml:"addr"`
-	Password string `yaml:"password"`
-	DB       int    `yaml:"db"`
+	Addr         string `yaml:"addr"`
+	Password     string `yaml:"password"`
+	DB           int    `yaml:"db"`
+	QMaxAttempts int    `yaml:"query_max_attempts"`
+	QDelay       int    `yaml:"query_delay_ms"`
 }
 
 func Load(path string) (*Config, error) {
@@ -98,6 +100,10 @@ func (c *Config) validate() error {
 
 	if c.Redis.Addr == "" {
 		return &RequiredError{"redis.addr"}
+	}
+	if c.Redis.QMaxAttempts <= 0 {
+		// TODO: выделить ошибку и обрабатывать её
+		return fmt.Errorf("query_max_attempts must be greater 0, have: %d", c.Redis.QMaxAttempts)
 	}
 
 	for i, rule := range c.Mapping.Rules {

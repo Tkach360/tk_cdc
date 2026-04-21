@@ -27,6 +27,10 @@ redis:
   # номер логической базы данных в Redis
   db: 0
 
+  # кол-во повторных попыток выполнения запросов redis
+  query_max_attempts: 3
+  query_delay_ms: 10
+
 mapping:
   default_schema: "public"
   rules:

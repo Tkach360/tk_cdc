@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/Tkach360/tk_cdc/internal/config"
 	"github.com/redis/go-redis/v9"
@@ -15,6 +16,13 @@ import (
 type Invalidator struct {
 	redis  *redis.Client
 	logger *slog.Logger
+
+	maxAttems int
+	delay     int
+}
+
+func (i *Invalidator) GetQueryDelay() time.Duration {
+	return time.Millisecond * time.Duration(i.delay)
 }
 
 // создать новый инвалидатор
@@ -30,17 +38,29 @@ func New(cfg *config.RedisConfig, logger *slog.Logger) (*Invalidator, error) {
 		return nil, fmt.Errorf("redis ping failed: %w", err)
 	}
 
-	return &Invalidator{redis, logger}, nil
+	return &Invalidator{redis, logger, cfg.QMaxAttempts, cfg.QDelay}, nil
 }
 
 // инвалидировать ключи
 func (i *Invalidator) Invalidate(ctx context.Context, keys []string) error {
-	// удаляем ключи из redis
-	// TODO: может использовать redis.Pipeliner для удаления? нужно разобраться что лучше
-	i.redis.Del(ctx, keys...)
+	if len(keys) == 0 {
+		return nil
+	}
 
-	// TODO: нужно делать повторные попытки удалить если соединение с redis было прервано
-	return nil
+	// TODO: сделать sentinel error которая будет хранить неинвалидированный ключ
+	var lastErr error
+	for attempt := 1; attempt <= i.maxAttems; attempt += 1 {
+		if err := i.redis.Unlink(ctx, keys...).Err(); err == nil {
+			return nil
+		} else {
+			lastErr = err
+			i.logger.Error("retrying invalidation", "attempt", attempt, "err", err)
+			time.Sleep(i.GetQueryDelay())
+			continue
+		}
+	}
+
+	return fmt.Errorf("invalidation failed: %w, att: %d", lastErr, i.maxAttems)
 }
 
 // запуск цикла инвалидации

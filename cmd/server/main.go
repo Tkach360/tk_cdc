@@ -20,22 +20,22 @@ func main() {
 	)
 	defer cancel()
 
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	cfg, err := config.Load("configs/config.yml")
 	if err != nil {
-		slog.Error("failed to load config", "error", err)
+		logger.Error("failed to load config", "error", err)
 		os.Exit(1)
 	}
-	slog.Info("starting tk_cdc")
+	logger.Info("starting tk_cdc")
 
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	svc, err := service.New(cfg, logger)
 	if err != nil {
-		slog.Error("init failed", "err", err)
+		logger.Error("init failed", "err", err)
 		os.Exit(1)
 	}
 
 	if err := svc.Run(ctx); err != nil && err != context.Canceled {
-		slog.Error("service failed", "err", err)
+		logger.Error("service failed", "err", err)
 		os.Exit(1)
 	}
 }

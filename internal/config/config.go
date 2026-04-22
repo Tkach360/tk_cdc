@@ -115,7 +115,7 @@ func (c *Config) validate() error {
 		return &InvalidValueError{"query_max_attempts must be >= 1", c.Redis.QMaxAttempts}
 	}
 	if c.Redis.QDelay < 0 {
-		return &InvalidValueError{"query_delay_ms must be >= 0", c.Redis.QMaxAttempts}
+		return &InvalidValueError{"query_delay_ms must be >= 0", c.Redis.QDelay}
 	}
 
 	for i, rule := range c.Mapping.Rules {

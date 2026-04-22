@@ -22,6 +22,9 @@ type PostgresConfig struct {
 	Addr string `yaml:"addr"`
 	DB   string `yaml:"db"`
 
+	ReconnMaxAttempts int `yaml:"reconnect_max_attempts"`
+	ReconnDelayMs     int `yaml:"reconnect_delay_ms"`
+
 	ReplicationUser string `yaml:"replication_user"`
 	ReplicationPass string `yaml:"replication_pass"`
 
@@ -78,6 +81,12 @@ func (c *Config) Validate() error {
 func (c *Config) validate() error {
 	if c.Postgres.Addr == "" {
 		return &RequiredError{"postgres.addr"}
+	}
+	if c.Postgres.ReconnMaxAttempts < 1 {
+		return &InvalidValueError{"reconnect_max_attempts must be >= 1", c.Postgres.ReconnMaxAttempts}
+	}
+	if c.Postgres.ReconnDelayMs < 0 {
+		return &InvalidValueError{"reconnect_delay_ms must be >= 0", c.Postgres.ReconnDelayMs}
 	}
 	if c.Postgres.DB == "" {
 		return &RequiredError{"postgres.db"}

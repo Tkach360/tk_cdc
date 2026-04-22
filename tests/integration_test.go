@@ -109,6 +109,8 @@ func insertDefaultFields(s *ContainersConfig) {
 		s.configYML = `
 postgres:
   addr: "localhost:5432"
+  reconnect_max_attempts: 3
+  reconnect_delay_ms: 5000
   db: "default_test_db"
   replication_user: "default_replication"
   replication_pass: "default_replication_pass"

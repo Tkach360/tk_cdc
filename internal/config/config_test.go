@@ -22,15 +22,17 @@ func TestConfigValidate(t *testing.T) {
 			name: "missing postgres addr",
 			config: &Config{
 				Postgres: PostgresConfig{
-					Addr:             "",
-					DB:               "testdb",
-					ReplicationUser:  "repl_user",
-					ReplicationPass:  "repl_pass",
-					AppUser:          "app_user",
-					AppPass:          "app_pass",
-					ReplicationSlot:  "test_slot",
-					Plugin:           "pgoutput",
-					PublicationNames: "",
+					Addr:              "",
+					DB:                "testdb",
+					ReplicationUser:   "repl_user",
+					ReplicationPass:   "repl_pass",
+					AppUser:           "app_user",
+					AppPass:           "app_pass",
+					ReplicationSlot:   "test_slot",
+					Plugin:            "pgoutput",
+					PublicationNames:  "",
+					ReconnMaxAttempts: 5,
+					ReconnDelayMs:     1000,
 				},
 				Redis: RedisConfig{
 					Addr:         "localhost:6379",
@@ -47,15 +49,17 @@ func TestConfigValidate(t *testing.T) {
 			name: "missing postgres db",
 			config: &Config{
 				Postgres: PostgresConfig{
-					Addr:             "localhost:5432",
-					DB:               "",
-					ReplicationUser:  "repl_user",
-					ReplicationPass:  "repl_pass",
-					AppUser:          "app_user",
-					AppPass:          "app_pass",
-					ReplicationSlot:  "test_slot",
-					Plugin:           "pgoutput",
-					PublicationNames: "",
+					Addr:              "localhost:5432",
+					DB:                "",
+					ReplicationUser:   "repl_user",
+					ReplicationPass:   "repl_pass",
+					AppUser:           "app_user",
+					AppPass:           "app_pass",
+					ReplicationSlot:   "test_slot",
+					Plugin:            "pgoutput",
+					PublicationNames:  "",
+					ReconnMaxAttempts: 5,
+					ReconnDelayMs:     1000,
 				},
 				Redis: RedisConfig{
 					Addr:         "localhost:6379",
@@ -72,15 +76,17 @@ func TestConfigValidate(t *testing.T) {
 			name: "missing replication user",
 			config: &Config{
 				Postgres: PostgresConfig{
-					Addr:             "localhost:5432",
-					DB:               "testdb",
-					ReplicationUser:  "",
-					ReplicationPass:  "repl_pass",
-					AppUser:          "app_user",
-					AppPass:          "app_pass",
-					ReplicationSlot:  "test_slot",
-					Plugin:           "pgoutput",
-					PublicationNames: "",
+					Addr:              "localhost:5432",
+					DB:                "testdb",
+					ReplicationUser:   "",
+					ReplicationPass:   "repl_pass",
+					AppUser:           "app_user",
+					AppPass:           "app_pass",
+					ReplicationSlot:   "test_slot",
+					Plugin:            "pgoutput",
+					PublicationNames:  "",
+					ReconnMaxAttempts: 5,
+					ReconnDelayMs:     1000,
 				},
 				Redis: RedisConfig{
 					Addr:         "localhost:6379",
@@ -97,15 +103,17 @@ func TestConfigValidate(t *testing.T) {
 			name: "missing replication password",
 			config: &Config{
 				Postgres: PostgresConfig{
-					Addr:             "localhost:5432",
-					DB:               "testdb",
-					ReplicationUser:  "repl_user",
-					ReplicationPass:  "",
-					AppUser:          "app_user",
-					AppPass:          "app_pass",
-					ReplicationSlot:  "test_slot",
-					Plugin:           "pgoutput",
-					PublicationNames: "",
+					Addr:              "localhost:5432",
+					DB:                "testdb",
+					ReplicationUser:   "repl_user",
+					ReplicationPass:   "",
+					AppUser:           "app_user",
+					AppPass:           "app_pass",
+					ReplicationSlot:   "test_slot",
+					Plugin:            "pgoutput",
+					PublicationNames:  "",
+					ReconnMaxAttempts: 5,
+					ReconnDelayMs:     1000,
 				},
 				Redis: RedisConfig{
 					Addr:         "localhost:6379",
@@ -122,15 +130,17 @@ func TestConfigValidate(t *testing.T) {
 			name: "missing app user",
 			config: &Config{
 				Postgres: PostgresConfig{
-					Addr:             "localhost:5432",
-					DB:               "testdb",
-					ReplicationUser:  "repl_user",
-					ReplicationPass:  "repl_pass",
-					AppUser:          "",
-					AppPass:          "app_pass",
-					ReplicationSlot:  "test_slot",
-					Plugin:           "pgoutput",
-					PublicationNames: "",
+					Addr:              "localhost:5432",
+					DB:                "testdb",
+					ReplicationUser:   "repl_user",
+					ReplicationPass:   "repl_pass",
+					AppUser:           "",
+					AppPass:           "app_pass",
+					ReplicationSlot:   "test_slot",
+					Plugin:            "pgoutput",
+					PublicationNames:  "",
+					ReconnMaxAttempts: 5,
+					ReconnDelayMs:     1000,
 				},
 				Redis: RedisConfig{
 					Addr:         "localhost:6379",
@@ -147,15 +157,17 @@ func TestConfigValidate(t *testing.T) {
 			name: "missing app password",
 			config: &Config{
 				Postgres: PostgresConfig{
-					Addr:             "localhost:5432",
-					DB:               "testdb",
-					ReplicationUser:  "repl_user",
-					ReplicationPass:  "repl_pass",
-					AppUser:          "app_user",
-					AppPass:          "",
-					ReplicationSlot:  "test_slot",
-					Plugin:           "pgoutput",
-					PublicationNames: "",
+					Addr:              "localhost:5432",
+					DB:                "testdb",
+					ReplicationUser:   "repl_user",
+					ReplicationPass:   "repl_pass",
+					AppUser:           "app_user",
+					AppPass:           "",
+					ReplicationSlot:   "test_slot",
+					Plugin:            "pgoutput",
+					PublicationNames:  "",
+					ReconnMaxAttempts: 5,
+					ReconnDelayMs:     1000,
 				},
 				Redis: RedisConfig{
 					Addr:         "localhost:6379",
@@ -172,15 +184,17 @@ func TestConfigValidate(t *testing.T) {
 			name: "missing replication slot",
 			config: &Config{
 				Postgres: PostgresConfig{
-					Addr:             "localhost:5432",
-					DB:               "testdb",
-					ReplicationUser:  "repl_user",
-					ReplicationPass:  "repl_pass",
-					AppUser:          "app_user",
-					AppPass:          "app_pass",
-					ReplicationSlot:  "",
-					Plugin:           "pgoutput",
-					PublicationNames: "",
+					Addr:              "localhost:5432",
+					DB:                "testdb",
+					ReplicationUser:   "repl_user",
+					ReplicationPass:   "repl_pass",
+					AppUser:           "app_user",
+					AppPass:           "app_pass",
+					ReplicationSlot:   "",
+					Plugin:            "pgoutput",
+					PublicationNames:  "",
+					ReconnMaxAttempts: 5,
+					ReconnDelayMs:     1000,
 				},
 				Redis: RedisConfig{
 					Addr:         "localhost:6379",
@@ -194,18 +208,101 @@ func TestConfigValidate(t *testing.T) {
 			},
 		},
 		{
+			name: "negative reconnect_max_attempts",
+			config: &Config{
+				Postgres: PostgresConfig{
+					Addr:              "localhost:5432",
+					DB:                "testdb",
+					ReplicationUser:   "repl_user",
+					ReplicationPass:   "repl_pass",
+					AppUser:           "app_user",
+					AppPass:           "app_pass",
+					ReplicationSlot:   "test_slot",
+					Plugin:            "pgoutput",
+					PublicationNames:  "my_publication",
+					ReconnMaxAttempts: -1,
+					ReconnDelayMs:     1000,
+				},
+				Redis: RedisConfig{
+					Addr:         "localhost:6379",
+					QMaxAttempts: 3,
+					QDelay:       10,
+				},
+			},
+			checkErr: func(err error) bool {
+				var e *InvalidValueError
+				return errors.As(err, &e)
+			},
+		},
+		{
+			name: "negative reconnect_delay_ms",
+			config: &Config{
+				Postgres: PostgresConfig{
+					Addr:              "localhost:5432",
+					DB:                "testdb",
+					ReplicationUser:   "repl_user",
+					ReplicationPass:   "repl_pass",
+					AppUser:           "app_user",
+					AppPass:           "app_pass",
+					ReplicationSlot:   "test_slot",
+					Plugin:            "pgoutput",
+					PublicationNames:  "my_publication",
+					ReconnMaxAttempts: 5,
+					ReconnDelayMs:     -100,
+				},
+				Redis: RedisConfig{
+					Addr:         "localhost:6379",
+					QMaxAttempts: 3,
+					QDelay:       10,
+				},
+			},
+			checkErr: func(err error) bool {
+				var e *InvalidValueError
+				return errors.As(err, &e)
+			},
+		},
+		{
+			name: "zero reconnect_delay_ms (valid, will use default)",
+			config: &Config{
+				Postgres: PostgresConfig{
+					Addr:              "localhost:5432",
+					DB:                "testdb",
+					ReplicationUser:   "repl_user",
+					ReplicationPass:   "repl_pass",
+					AppUser:           "app_user",
+					AppPass:           "app_pass",
+					ReplicationSlot:   "test_slot",
+					Plugin:            "pgoutput",
+					PublicationNames:  "my_publication",
+					ReconnMaxAttempts: 5,
+					ReconnDelayMs:     0,
+				},
+				Redis: RedisConfig{
+					Addr:         "localhost:6379",
+					QMaxAttempts: 3,
+					QDelay:       10,
+				},
+			},
+			checkErr: func(err error) bool {
+				// 0 is valid and will be set to default in setDefaults()
+				return err == nil
+			},
+		},
+		{
 			name: "unsupported plugin",
 			config: &Config{
 				Postgres: PostgresConfig{
-					Addr:             "localhost:5432",
-					DB:               "testdb",
-					ReplicationUser:  "repl_user",
-					ReplicationPass:  "repl_pass",
-					AppUser:          "app_user",
-					AppPass:          "app_pass",
-					ReplicationSlot:  "test_slot",
-					Plugin:           "wal2json",
-					PublicationNames: "",
+					Addr:              "localhost:5432",
+					DB:                "testdb",
+					ReplicationUser:   "repl_user",
+					ReplicationPass:   "repl_pass",
+					AppUser:           "app_user",
+					AppPass:           "app_pass",
+					ReplicationSlot:   "test_slot",
+					Plugin:            "wal2json",
+					PublicationNames:  "",
+					ReconnMaxAttempts: 5,
+					ReconnDelayMs:     1000,
 				},
 				Redis: RedisConfig{
 					Addr:         "localhost:6379",
@@ -221,15 +318,17 @@ func TestConfigValidate(t *testing.T) {
 			name: "missing redis addr",
 			config: &Config{
 				Postgres: PostgresConfig{
-					Addr:             "localhost:5432",
-					DB:               "testdb",
-					ReplicationUser:  "repl_user",
-					ReplicationPass:  "repl_pass",
-					AppUser:          "app_user",
-					AppPass:          "app_pass",
-					ReplicationSlot:  "test_slot",
-					Plugin:           "pgoutput",
-					PublicationNames: "my_publication",
+					Addr:              "localhost:5432",
+					DB:                "testdb",
+					ReplicationUser:   "repl_user",
+					ReplicationPass:   "repl_pass",
+					AppUser:           "app_user",
+					AppPass:           "app_pass",
+					ReplicationSlot:   "test_slot",
+					Plugin:            "pgoutput",
+					PublicationNames:  "my_publication",
+					ReconnMaxAttempts: 5,
+					ReconnDelayMs:     1000,
 				},
 				Redis: RedisConfig{
 					Addr:         "",
@@ -246,15 +345,17 @@ func TestConfigValidate(t *testing.T) {
 			name: "negative query_max_attempts",
 			config: &Config{
 				Postgres: PostgresConfig{
-					Addr:             "localhost:5432",
-					DB:               "testdb",
-					ReplicationUser:  "repl_user",
-					ReplicationPass:  "repl_pass",
-					AppUser:          "app_user",
-					AppPass:          "app_pass",
-					ReplicationSlot:  "test_slot",
-					Plugin:           "pgoutput",
-					PublicationNames: "my_publication",
+					Addr:              "localhost:5432",
+					DB:                "testdb",
+					ReplicationUser:   "repl_user",
+					ReplicationPass:   "repl_pass",
+					AppUser:           "app_user",
+					AppPass:           "app_pass",
+					ReplicationSlot:   "test_slot",
+					Plugin:            "pgoutput",
+					PublicationNames:  "my_publication",
+					ReconnMaxAttempts: 5,
+					ReconnDelayMs:     1000,
 				},
 				Redis: RedisConfig{
 					Addr:         "localhost:6379",
@@ -271,15 +372,17 @@ func TestConfigValidate(t *testing.T) {
 			name: "negative query_delay_ms",
 			config: &Config{
 				Postgres: PostgresConfig{
-					Addr:             "localhost:5432",
-					DB:               "testdb",
-					ReplicationUser:  "repl_user",
-					ReplicationPass:  "repl_pass",
-					AppUser:          "app_user",
-					AppPass:          "app_pass",
-					ReplicationSlot:  "test_slot",
-					Plugin:           "pgoutput",
-					PublicationNames: "my_publication",
+					Addr:              "localhost:5432",
+					DB:                "testdb",
+					ReplicationUser:   "repl_user",
+					ReplicationPass:   "repl_pass",
+					AppUser:           "app_user",
+					AppPass:           "app_pass",
+					ReplicationSlot:   "test_slot",
+					Plugin:            "pgoutput",
+					PublicationNames:  "my_publication",
+					ReconnMaxAttempts: 5,
+					ReconnDelayMs:     1000,
 				},
 				Redis: RedisConfig{
 					Addr:         "localhost:6379",
@@ -296,15 +399,17 @@ func TestConfigValidate(t *testing.T) {
 			name: "zero query_max_attempts",
 			config: &Config{
 				Postgres: PostgresConfig{
-					Addr:             "localhost:5432",
-					DB:               "testdb",
-					ReplicationUser:  "repl_user",
-					ReplicationPass:  "repl_pass",
-					AppUser:          "app_user",
-					AppPass:          "app_pass",
-					ReplicationSlot:  "test_slot",
-					Plugin:           "pgoutput",
-					PublicationNames: "my_publication",
+					Addr:              "localhost:5432",
+					DB:                "testdb",
+					ReplicationUser:   "repl_user",
+					ReplicationPass:   "repl_pass",
+					AppUser:           "app_user",
+					AppPass:           "app_pass",
+					ReplicationSlot:   "test_slot",
+					Plugin:            "pgoutput",
+					PublicationNames:  "my_publication",
+					ReconnMaxAttempts: 5,
+					ReconnDelayMs:     1000,
 				},
 				Redis: RedisConfig{
 					Addr:         "localhost:6379",
@@ -321,15 +426,17 @@ func TestConfigValidate(t *testing.T) {
 			name: "query_max_attempts = 1",
 			config: &Config{
 				Postgres: PostgresConfig{
-					Addr:             "localhost:5432",
-					DB:               "testdb",
-					ReplicationUser:  "repl_user",
-					ReplicationPass:  "repl_pass",
-					AppUser:          "app_user",
-					AppPass:          "app_pass",
-					ReplicationSlot:  "test_slot",
-					Plugin:           "pgoutput",
-					PublicationNames: "my_publication",
+					Addr:              "localhost:5432",
+					DB:                "testdb",
+					ReplicationUser:   "repl_user",
+					ReplicationPass:   "repl_pass",
+					AppUser:           "app_user",
+					AppPass:           "app_pass",
+					ReplicationSlot:   "test_slot",
+					Plugin:            "pgoutput",
+					PublicationNames:  "my_publication",
+					ReconnMaxAttempts: 5,
+					ReconnDelayMs:     1000,
 				},
 				Redis: RedisConfig{
 					Addr:         "localhost:6379",
@@ -345,15 +452,17 @@ func TestConfigValidate(t *testing.T) {
 			name: "zero query_delay_ms",
 			config: &Config{
 				Postgres: PostgresConfig{
-					Addr:             "localhost:5432",
-					DB:               "testdb",
-					ReplicationUser:  "repl_user",
-					ReplicationPass:  "repl_pass",
-					AppUser:          "app_user",
-					AppPass:          "app_pass",
-					ReplicationSlot:  "test_slot",
-					Plugin:           "pgoutput",
-					PublicationNames: "my_publication",
+					Addr:              "localhost:5432",
+					DB:                "testdb",
+					ReplicationUser:   "repl_user",
+					ReplicationPass:   "repl_pass",
+					AppUser:           "app_user",
+					AppPass:           "app_pass",
+					ReplicationSlot:   "test_slot",
+					Plugin:            "pgoutput",
+					PublicationNames:  "my_publication",
+					ReconnMaxAttempts: 5,
+					ReconnDelayMs:     1000,
 				},
 				Redis: RedisConfig{
 					Addr:         "localhost:6379",
@@ -369,15 +478,17 @@ func TestConfigValidate(t *testing.T) {
 			name: "missing publication names with pgoutput",
 			config: &Config{
 				Postgres: PostgresConfig{
-					Addr:             "localhost:5432",
-					DB:               "testdb",
-					ReplicationUser:  "repl_user",
-					ReplicationPass:  "repl_pass",
-					AppUser:          "app_user",
-					AppPass:          "app_pass",
-					ReplicationSlot:  "test_slot",
-					Plugin:           "pgoutput",
-					PublicationNames: "",
+					Addr:              "localhost:5432",
+					DB:                "testdb",
+					ReplicationUser:   "repl_user",
+					ReplicationPass:   "repl_pass",
+					AppUser:           "app_user",
+					AppPass:           "app_pass",
+					ReplicationSlot:   "test_slot",
+					Plugin:            "pgoutput",
+					PublicationNames:  "",
+					ReconnMaxAttempts: 5,
+					ReconnDelayMs:     1000,
 				},
 				Redis: RedisConfig{
 					Addr:         "localhost:6379",
@@ -394,15 +505,17 @@ func TestConfigValidate(t *testing.T) {
 			name: "missing table name in mapping",
 			config: &Config{
 				Postgres: PostgresConfig{
-					Addr:             "localhost:5432",
-					DB:               "testdb",
-					ReplicationUser:  "repl_user",
-					ReplicationPass:  "repl_pass",
-					AppUser:          "app_user",
-					AppPass:          "app_pass",
-					ReplicationSlot:  "test_slot",
-					Plugin:           "pgoutput",
-					PublicationNames: "my_publication",
+					Addr:              "localhost:5432",
+					DB:                "testdb",
+					ReplicationUser:   "repl_user",
+					ReplicationPass:   "repl_pass",
+					AppUser:           "app_user",
+					AppPass:           "app_pass",
+					ReplicationSlot:   "test_slot",
+					Plugin:            "pgoutput",
+					PublicationNames:  "my_publication",
+					ReconnMaxAttempts: 5,
+					ReconnDelayMs:     1000,
 				},
 				Redis: RedisConfig{
 					Addr:         "localhost:6379",
@@ -434,15 +547,17 @@ func TestConfigValidate(t *testing.T) {
 			name: "missing key pattern",
 			config: &Config{
 				Postgres: PostgresConfig{
-					Addr:             "localhost:5432",
-					DB:               "testdb",
-					ReplicationUser:  "repl_user",
-					ReplicationPass:  "repl_pass",
-					AppUser:          "app_user",
-					AppPass:          "app_pass",
-					ReplicationSlot:  "test_slot",
-					Plugin:           "pgoutput",
-					PublicationNames: "my_publication",
+					Addr:              "localhost:5432",
+					DB:                "testdb",
+					ReplicationUser:   "repl_user",
+					ReplicationPass:   "repl_pass",
+					AppUser:           "app_user",
+					AppPass:           "app_pass",
+					ReplicationSlot:   "test_slot",
+					Plugin:            "pgoutput",
+					PublicationNames:  "my_publication",
+					ReconnMaxAttempts: 5,
+					ReconnDelayMs:     1000,
 				},
 				Redis: RedisConfig{
 					Addr:         "localhost:6379",
@@ -471,15 +586,17 @@ func TestConfigValidate(t *testing.T) {
 			name: "key pattern without placeholder",
 			config: &Config{
 				Postgres: PostgresConfig{
-					Addr:             "localhost:5432",
-					DB:               "testdb",
-					ReplicationUser:  "repl_user",
-					ReplicationPass:  "repl_pass",
-					AppUser:          "app_user",
-					AppPass:          "app_pass",
-					ReplicationSlot:  "test_slot",
-					Plugin:           "pgoutput",
-					PublicationNames: "my_publication",
+					Addr:              "localhost:5432",
+					DB:                "testdb",
+					ReplicationUser:   "repl_user",
+					ReplicationPass:   "repl_pass",
+					AppUser:           "app_user",
+					AppPass:           "app_pass",
+					ReplicationSlot:   "test_slot",
+					Plugin:            "pgoutput",
+					PublicationNames:  "my_publication",
+					ReconnMaxAttempts: 5,
+					ReconnDelayMs:     1000,
 				},
 				Redis: RedisConfig{
 					Addr:         "localhost:6379",
@@ -505,18 +622,20 @@ func TestConfigValidate(t *testing.T) {
 			},
 		},
 		{
-			name: "valid config",
+			name: "valid config with all fields including reconnect",
 			config: &Config{
 				Postgres: PostgresConfig{
-					Addr:             "localhost:5432",
-					DB:               "testdb",
-					ReplicationUser:  "repl_user",
-					ReplicationPass:  "repl_pass",
-					AppUser:          "app_user",
-					AppPass:          "app_pass",
-					ReplicationSlot:  "test_slot",
-					Plugin:           "pgoutput",
-					PublicationNames: "my_publication",
+					Addr:              "localhost:5432",
+					DB:                "testdb",
+					ReplicationUser:   "repl_user",
+					ReplicationPass:   "repl_pass",
+					AppUser:           "app_user",
+					AppPass:           "app_pass",
+					ReplicationSlot:   "test_slot",
+					Plugin:            "pgoutput",
+					PublicationNames:  "my_publication",
+					ReconnMaxAttempts: 5,
+					ReconnDelayMs:     1000,
 				},
 				Redis: RedisConfig{
 					Addr:         "localhost:6379",
@@ -541,15 +660,17 @@ func TestConfigValidate(t *testing.T) {
 			name: "valid config with multiple publications",
 			config: &Config{
 				Postgres: PostgresConfig{
-					Addr:             "localhost:5432",
-					DB:               "testdb",
-					ReplicationUser:  "repl_user",
-					ReplicationPass:  "repl_pass",
-					AppUser:          "app_user",
-					AppPass:          "app_pass",
-					ReplicationSlot:  "test_slot",
-					Plugin:           "pgoutput",
-					PublicationNames: "pub1,pub2,pub3",
+					Addr:              "localhost:5432",
+					DB:                "testdb",
+					ReplicationUser:   "repl_user",
+					ReplicationPass:   "repl_pass",
+					AppUser:           "app_user",
+					AppPass:           "app_pass",
+					ReplicationSlot:   "test_slot",
+					Plugin:            "pgoutput",
+					PublicationNames:  "pub1,pub2,pub3",
+					ReconnMaxAttempts: 5,
+					ReconnDelayMs:     1000,
 				},
 				Redis: RedisConfig{
 					Addr:         "localhost:6379",
@@ -609,6 +730,8 @@ postgres:
   replication_slot: "slot1"
   plugin: "pgoutput"
   publication_names: "my_pub"
+  reconnect_max_attempts: 5
+  reconnect_delay_ms: 1000
 redis:
   addr: "localhost:6379"
   query_max_attempts: 3
@@ -627,6 +750,8 @@ mapping:
 				assert.Equal(t, "repl_pass", cfg.Postgres.ReplicationPass)
 				assert.Equal(t, "app_user", cfg.Postgres.AppUser)
 				assert.Equal(t, "app_pass", cfg.Postgres.AppPass)
+				assert.Equal(t, 5, cfg.Postgres.ReconnMaxAttempts)
+				assert.Equal(t, 1000, cfg.Postgres.ReconnDelayMs)
 				assert.Equal(t, "custom", cfg.Mapping.DefaultSchema)
 				require.Len(t, cfg.Mapping.Rules, 1)
 				rule := cfg.Mapping.Rules[0]
@@ -644,6 +769,8 @@ mapping:
 postgres:
   addr: "localhost:5432"
   db: "testdb"
+  reconnect_max_attempts: 3
+  reconnect_delay_ms: 5000
   replication_user: "repl_user"
   replication_pass: "repl_pass"
   app_user: "app_user"
@@ -677,6 +804,8 @@ mapping:
 postgres:
   addr: "localhost:5432"
   db: "testdb"
+  reconnect_max_attempts: 3
+  reconnect_delay_ms: 5000
   replication_user: "repl_user"
   replication_pass: "repl_pass"
   app_user: "app_user"
@@ -710,6 +839,8 @@ mapping:
 postgres:
   addr: "localhost:5432"
   db: "testdb"
+  reconnect_max_attempts: 3
+  reconnect_delay_ms: 5000
   replication_user: "repl_user"
   replication_pass: "repl_pass"
   app_user: "app_user"
@@ -962,6 +1093,8 @@ postgres:
   replication_slot: "${PG_SLOT}"
   plugin: "pgoutput"
   publication_names: "${PG_PUBLICATIONS}"
+  reconnect_max_attempts: ${RECONN_MAX_ATTEMPTS}
+  reconnect_delay_ms: ${RECONN_DELAY_MS}
 redis:
   addr: "${REDIS_ADDR}"
   query_max_attempts: ${REDIS_MAX_ATTEMPTS}
@@ -972,17 +1105,19 @@ mapping:
       key_pattern: "user:{id}"
 `,
 			env: map[string]string{
-				"POSTGRES_ADDR":      "localhost:5432",
-				"POSTGRES_DB":        "testdb",
-				"PG_REPL_USER":       "repl_user",
-				"PG_REPL_PASS":       "repl_pass",
-				"PG_APP_USER":        "app_user",
-				"PG_APP_PASS":        "app_pass",
-				"PG_SLOT":            "test_slot",
-				"REDIS_ADDR":         "redis:6379",
-				"PG_PUBLICATIONS":    "env_pub1,env_pub2",
-				"REDIS_MAX_ATTEMPTS": "5",
-				"REDIS_DELAY_MS":     "150",
+				"POSTGRES_ADDR":       "localhost:5432",
+				"POSTGRES_DB":         "testdb",
+				"PG_REPL_USER":        "repl_user",
+				"PG_REPL_PASS":        "repl_pass",
+				"PG_APP_USER":         "app_user",
+				"PG_APP_PASS":         "app_pass",
+				"PG_SLOT":             "test_slot",
+				"REDIS_ADDR":          "redis:6379",
+				"PG_PUBLICATIONS":     "env_pub1,env_pub2",
+				"REDIS_MAX_ATTEMPTS":  "5",
+				"REDIS_DELAY_MS":      "150",
+				"RECONN_MAX_ATTEMPTS": "7",
+				"RECONN_DELAY_MS":     "3000",
 			},
 			wantErr: false,
 			checkFunc: func(t *testing.T, cfg *Config) {
@@ -995,6 +1130,8 @@ mapping:
 				assert.Equal(t, "test_slot", cfg.Postgres.ReplicationSlot)
 				assert.Equal(t, "redis:6379", cfg.Redis.Addr)
 				assert.Equal(t, "env_pub1,env_pub2", cfg.Postgres.PublicationNames)
+				assert.Equal(t, 7, cfg.Postgres.ReconnMaxAttempts)
+				assert.Equal(t, 3000, cfg.Postgres.ReconnDelayMs)
 				assert.Equal(t, 5, cfg.Redis.QMaxAttempts)
 				assert.Equal(t, 150, cfg.Redis.QDelay)
 			},
@@ -1005,6 +1142,8 @@ mapping:
 postgres:
   addr: "localhost:5432"
   db: "testdb"
+  reconnect_max_attempts: 3
+  reconnect_delay_ms: 5000
   replication_user: "repl_user"
   replication_pass: "repl_pass"
   app_user: "app_user"
@@ -1060,6 +1199,8 @@ mapping:
 postgres:
   addr: "localhost:5432"
   db: "testdb"
+  reconnect_max_attempts: 3
+  reconnect_delay_ms: 5000
   replication_user: "repl_user"
   replication_pass: "repl_pass"
   app_user: "app_user"
@@ -1090,6 +1231,8 @@ mapping:
 postgres:
   addr: "localhost:5432"
   db: "testdb"
+  reconnect_max_attempts: 3
+  reconnect_delay_ms: 5000
   replication_user: "repl_user"
   replication_pass: "repl_pass"
   app_user: "app_user"
@@ -1114,11 +1257,69 @@ mapping:
 			},
 		},
 		{
+			name: "negative reconnect_max_attempts in yaml",
+			yamlContent: `
+postgres:
+  addr: "localhost:5432"
+  db: "testdb"
+  reconnect_max_attempts: 3
+  reconnect_delay_ms: 5000
+  replication_user: "repl_user"
+  replication_pass: "repl_pass"
+  app_user: "app_user"
+  app_pass: "app_pass"
+  replication_slot: "slot1"
+  plugin: "pgoutput"
+  publication_names: "my_pub"
+  reconnect_max_attempts: -5
+  reconnect_delay_ms: 1000
+redis:
+  addr: "localhost:6379"
+  query_max_attempts: 3
+  query_delay_ms: 10
+mapping:
+  default_schema: "custom"
+  rules:
+    - table: "users"
+      key_pattern: "user:{id}"
+`,
+			wantErr: true,
+		},
+		{
+			name: "negative reconnect_delay_ms in yaml",
+			yamlContent: `
+postgres:
+  addr: "localhost:5432"
+  db: "testdb"
+  replication_user: "repl_user"
+  replication_pass: "repl_pass"
+  app_user: "app_user"
+  app_pass: "app_pass"
+  replication_slot: "slot1"
+  plugin: "pgoutput"
+  publication_names: "my_pub"
+  reconnect_max_attempts: 5
+  reconnect_delay_ms: -1000
+redis:
+  addr: "localhost:6379"
+  query_max_attempts: 3
+  query_delay_ms: 10
+mapping:
+  default_schema: "custom"
+  rules:
+    - table: "users"
+      key_pattern: "user:{id}"
+`,
+			wantErr: true,
+		},
+		{
 			name: "negative query_max_attempts in yaml",
 			yamlContent: `
 postgres:
   addr: "localhost:5432"
   db: "testdb"
+  reconnect_max_attempts: 3
+  reconnect_delay_ms: 5000
   replication_user: "repl_user"
   replication_pass: "repl_pass"
   app_user: "app_user"
@@ -1176,6 +1377,8 @@ postgres:
   replication_slot: "slot1"
   plugin: "pgoutput"
   publication_names: "my_pub"
+  reconnect_max_attempts: 15
+  reconnect_delay_ms: 5000
 redis:
   addr: "localhost:6379"
   query_max_attempts: 10
@@ -1188,6 +1391,8 @@ mapping:
 `,
 			wantErr: false,
 			checkFunc: func(t *testing.T, cfg *Config) {
+				assert.Equal(t, 15, cfg.Postgres.ReconnMaxAttempts)
+				assert.Equal(t, 5000, cfg.Postgres.ReconnDelayMs)
 				assert.Equal(t, 10, cfg.Redis.QMaxAttempts)
 				assert.Equal(t, 500, cfg.Redis.QDelay)
 			},

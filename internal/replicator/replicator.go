@@ -50,8 +50,8 @@ func New(cfg *config.Config, logger *slog.Logger) (*Replicator, error) {
 	}
 
 	return &Replicator{
-		reconnMaxAttempts: 1,
-		reconnDelayMs:     100,
+		reconnMaxAttempts: cfg.Postgres.ReconnMaxAttempts,
+		reconnDelayMs:     cfg.Postgres.ReconnDelayMs,
 		cfg:               cfg,
 		logger:            logger,
 		repConfig:         repConfig,

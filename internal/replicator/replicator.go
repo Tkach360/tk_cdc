@@ -112,11 +112,7 @@ func (r *Replicator) Run(ctx context.Context, keysCh chan<- []string) error {
 		default:
 		}
 
-		// TODO: вынести величину таймаута в конфиг
-		msgCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
-		rawMsg, err := conn.PgConn().ReceiveMessage(msgCtx)
-		cancel()
-
+		rawMsg, err := conn.PgConn().ReceiveMessage(ctx)
 		if err != nil {
 			if errors.Is(err, context.DeadlineExceeded) {
 				continue

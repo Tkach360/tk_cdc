@@ -18,6 +18,10 @@ import (
 )
 
 type Replicator struct {
+	conn              *pgx.Conn
+	reconnMaxAttempts int
+	reconnDelayMs     int
+
 	cfg    *config.Config
 	logger *slog.Logger
 
@@ -26,6 +30,10 @@ type Replicator struct {
 	mapper    *mapper.Mapper
 	slotName  string
 	plugin    string
+}
+
+func (r *Replicator) GetReconnectDelay() time.Duration {
+	return time.Millisecond * time.Duration(r.reconnDelayMs)
 }
 
 func New(cfg *config.Config, logger *slog.Logger) (*Replicator, error) {
@@ -42,27 +50,25 @@ func New(cfg *config.Config, logger *slog.Logger) (*Replicator, error) {
 	}
 
 	return &Replicator{
-		cfg:       cfg,
-		logger:    logger,
-		repConfig: repConfig,
-		appConfig: appConfig,
-		mapper:    mapper.New(&cfg.Mapping),
-		slotName:  cfg.Postgres.ReplicationSlot,
-		plugin:    cfg.Postgres.Plugin,
+		reconnMaxAttempts: 1,
+		reconnDelayMs:     100,
+		cfg:               cfg,
+		logger:            logger,
+		repConfig:         repConfig,
+		appConfig:         appConfig,
+		mapper:            mapper.New(&cfg.Mapping),
+		slotName:          cfg.Postgres.ReplicationSlot,
+		plugin:            cfg.Postgres.Plugin,
 	}, nil
 }
 
-// основной цикл работы replicator
-// - читает WAL
-// - обновляет кеш
-func (r *Replicator) Run(ctx context.Context, keysCh chan<- []string) error {
+func (r *Replicator) connect(ctx context.Context) error {
 	r.logger.Info("connecting to postgres", "dsn", r.cfg.Postgres.ReplicationDSN())
 
 	conn, err := pgx.ConnectConfig(ctx, r.repConfig)
 	if err != nil {
 		return fmt.Errorf("connection postgres: %w", err)
 	}
-	defer conn.Close(ctx)
 
 	if err := r.ensureReplicationSlot(ctx); err != nil {
 		return fmt.Errorf("ensure replication slot: %w", err)
@@ -100,7 +106,43 @@ func (r *Replicator) Run(ctx context.Context, keysCh chan<- []string) error {
 	if err != nil {
 		return fmt.Errorf("start replication %w", err)
 	}
+	r.conn = conn
 	r.logger.Info("replication stream started", "systemid", sysident.SystemID)
+	return nil
+}
+
+func (r *Replicator) reconnect(ctx context.Context) error {
+
+	var lastErr error
+	for attempt := 0; attempt <= r.reconnMaxAttempts; attempt++ {
+		if err := r.connect(ctx); err == nil {
+			return nil
+		} else {
+			lastErr = err
+			r.logger.Error("retrying connect to postgres", "attempt", attempt, "err", err)
+		}
+
+		if attempt == r.reconnMaxAttempts {
+			break
+		}
+
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("replication canceled: %w", ctx.Err())
+		case <-time.After(r.GetReconnectDelay()):
+		}
+	}
+	return fmt.Errorf("reconnect to postgres failed: %w", lastErr)
+}
+
+// основной цикл работы replicator
+// - читает WAL
+// - обновляет кеш
+func (r *Replicator) Run(ctx context.Context, keysCh chan<- []string) error {
+	if err := r.reconnect(ctx); err != nil {
+		return err
+	}
+	defer r.conn.Close(ctx)
 
 	// основной цикл работы
 	// читаем сообщение -> обрабатываем -> подтверждаем обработку
@@ -112,7 +154,7 @@ func (r *Replicator) Run(ctx context.Context, keysCh chan<- []string) error {
 		default:
 		}
 
-		rawMsg, err := conn.PgConn().ReceiveMessage(ctx)
+		rawMsg, err := r.conn.PgConn().ReceiveMessage(ctx)
 		if err != nil {
 			if errors.Is(err, context.DeadlineExceeded) {
 				continue
@@ -120,8 +162,13 @@ func (r *Replicator) Run(ctx context.Context, keysCh chan<- []string) error {
 			if errors.Is(err, context.Canceled) {
 				return nil
 			}
-			r.logger.Warn("receive message", "error", err)
-			// TODO: нужна логика переподключения
+			r.logger.Warn("receive message error, reconnecting", "error", err)
+			r.conn.PgConn().Close(ctx)
+
+			if err := r.reconnect(ctx); err != nil {
+				r.logger.Error("failed to reconnect", "error", err)
+				return err
+			}
 			continue
 		}
 
@@ -154,7 +201,7 @@ func (r *Replicator) Run(ctx context.Context, keysCh chan<- []string) error {
 				// то отправляем в postgres уведомление с новым LSN о том что мы обработали
 				if _, ok := logicalMsg.(*pglogrepl.CommitMessage); proceeded && ok {
 					confirmLSN := xld.WALStart + pglogrepl.LSN(len(xld.WALData))
-					if err := r.sendStandbyStatusUpdate(ctx, conn, confirmLSN); err != nil {
+					if err := r.sendStandbyStatusUpdate(ctx, confirmLSN); err != nil {
 						r.logger.Error("send standby status", "error", err)
 					}
 					r.logger.Debug("confirmed LSN", "lsn", confirmLSN.String())
@@ -318,12 +365,12 @@ func (r *Replicator) handleRowChange(ctx context.Context, relID uint32, tuple *p
 }
 
 // отправить статус ожидания
-func (r *Replicator) sendStandbyStatusUpdate(ctx context.Context, conn *pgx.Conn, lsn pglogrepl.LSN) error {
+func (r *Replicator) sendStandbyStatusUpdate(ctx context.Context, lsn pglogrepl.LSN) error {
 
 	// отправляем статус обработки WAL в postgres, чтобы он смог очистить ненужные записи WAL
 	err := pglogrepl.SendStandbyStatusUpdate(
 		ctx,
-		conn.PgConn(),
+		r.conn.PgConn(),
 		pglogrepl.StandbyStatusUpdate{
 			WALWritePosition: lsn,
 			WALFlushPosition: lsn,

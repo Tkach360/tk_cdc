@@ -1,6 +1,8 @@
 postgres:
   addr: "${DB_ADDR:-localhost:5432}"
   db: "${DB:-demo}"
+  reconnect_max_attempts: 3
+  reconnect_delay_ms: 5000
 
   # пользователь для чтения репликации
   replication_user: "${TKCDC_REPLICATION_USER:-tkcdc_replication_user}"

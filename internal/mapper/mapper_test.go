@@ -520,3 +520,107 @@ func TestExtractColumnName(t *testing.T) {
 		})
 	}
 }
+
+func TestExtractColumnNames(t *testing.T) {
+	tests := []struct {
+		name        string
+		keyPattern  string
+		expected    []string
+		expectedErr error
+	}{
+		{
+			name:        "valid pattern with simple placeholder",
+			keyPattern:  "user:{id}",
+			expected:    []string{"id"},
+			expectedErr: nil,
+		},
+		{
+			name:        "valid pattern with underscore",
+			keyPattern:  "user:{user_id}",
+			expected:    []string{"user_id"},
+			expectedErr: nil,
+		},
+		{
+			name:        "valid pattern with text before and after braces",
+			keyPattern:  "prefix_{code}_suffix",
+			expected:    []string{"code"},
+			expectedErr: nil,
+		},
+		{
+			name:        "valid pattern with only braces",
+			keyPattern:  "{id}",
+			expected:    []string{"id"},
+			expectedErr: nil,
+		},
+		{
+			name:        "valid pattern with special chars in placeholder",
+			keyPattern:  "user:{user-id}",
+			expected:    []string{"user-id"},
+			expectedErr: nil,
+		},
+		{
+			name:        "multiple braces - returns all placeholders",
+			keyPattern:  "user:{id}:{name}",
+			expected:    []string{"id", "name"},
+			expectedErr: nil,
+		},
+		{
+			name:        "multiple braces with text between",
+			keyPattern:  "{first}_{second}_{third}",
+			expected:    []string{"first", "second", "third"},
+			expectedErr: nil,
+		},
+		{
+			name:        "missing opening brace",
+			keyPattern:  "user:id}",
+			expected:    nil,
+			expectedErr: ErrMissingOpeningBrace,
+		},
+		{
+			name:        "missing closing brace",
+			keyPattern:  "user:{id",
+			expected:    nil,
+			expectedErr: ErrMissingClosingBrace,
+		},
+		{
+			name:        "empty column name",
+			keyPattern:  "user:{}",
+			expected:    nil,
+			expectedErr: ErrEmptyColumnName,
+		},
+		{
+			name:        "closing brace before opening brace",
+			keyPattern:  "user:}id{",
+			expected:    nil,
+			expectedErr: ErrClosingBraceBeforeOpening,
+		},
+		{
+			name:        "empty placeholder in multiple braces",
+			keyPattern:  "user:{id}:{}:{name}",
+			expected:    nil,
+			expectedErr: ErrEmptyColumnName,
+		},
+		{
+			name:        "nested braces - invalid",
+			keyPattern:  "user:{id:{name}}",
+			expected:    nil,
+			expectedErr: ErrMissingOpeningBrace,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := extractColumnNames(tt.keyPattern)
+
+			if tt.expectedErr != nil {
+				assert.Error(t, err)
+				assert.True(t, errors.Is(err, tt.expectedErr),
+					"Expected error \"%v\", got \"%v\"", tt.expectedErr, err)
+				assert.Nil(t, result)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expected, result)
+			}
+		})
+	}
+}

@@ -119,3 +119,38 @@ func extractColumnName(keyPattern string) (string, error) {
 
 	return columnName, nil
 }
+
+// получить имена ключей, которые указаны в keyPattern в фигурных скобках
+// - для user{id} вернет []string{"id"}
+// - для user{id}:{name} вернет []string{"id", "name"}
+func extractColumnNames(keyPattern string) ([]string, error) {
+	names := make([]string, 0)
+	for {
+		start := strings.Index(keyPattern, "{")
+		end := strings.Index(keyPattern, "}")
+
+		if start == -1 && end == -1 {
+			break
+		}
+
+		if start == -1 && end != -1 {
+			return nil, fmt.Errorf("%w in pattern '%s'", ErrMissingOpeningBrace, keyPattern)
+		}
+		if start != -1 && end == -1 {
+			return nil, fmt.Errorf("%w in pattern '%s'", ErrMissingClosingBrace, keyPattern)
+		}
+		if end <= start {
+			return nil, fmt.Errorf("%w in pattern '%s'", ErrClosingBraceBeforeOpening, keyPattern)
+		}
+
+		name := keyPattern[start+1 : end]
+		if name == "" {
+			return nil, fmt.Errorf("%w in pattern '%s'", ErrEmptyColumnName, keyPattern)
+		}
+
+		names = append(names, name)
+		keyPattern = keyPattern[end+1:]
+	}
+
+	return names, nil
+}

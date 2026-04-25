@@ -31,7 +31,6 @@ type PostgresConfig struct {
 	AppUser string `yaml:"app_user"`
 	AppPass string `yaml:"app_pass"`
 
-	// DSN              string `yaml:"dsn"`
 	ReplicationSlot  string `yaml:"replication_slot"`
 	Plugin           string `yaml:"plugin"`
 	PublicationNames string `yaml:"publication_names"`

@@ -6,37 +6,38 @@ package mapper
 import (
 	"fmt"
 	"strings"
+	"text/template"
 
 	"github.com/jackc/pglogrepl"
 )
 
 type Mapper struct {
-	// правила маппинга
-	// - key - имя отображения (таблицы) в виде схема.имя
-	// - value - собственно правило
-	rules map[string]MappingRule
+	// отображение полного имени таблицы на правило маппинга
+	// - key - "<имя_схемы>.<имя_таблицы>"
+	// - value - ссылка на првило маппинга
+	qnameRules map[string]*MappingRule
 
-	// хеш-таблица данных об отношениях
+	// отображение RelationID на правила маппинга
 	// - key - RelationID
-	// - value - *pglogrepl.RelationMessage
-	relData map[uint32]*pglogrepl.RelationMessage
+	// - value - ссылка на првило маппинга
+	relIDRules map[uint32]*MappingRule
 }
 
 type MappingRule struct {
 	Table      Table  `yaml:"table"`
 	KeyPattern string `yaml:"key_pattern"`
+	Compiler   KeyCompiler
 }
 
 func New(cfg *MappingConfig) *Mapper {
-
-	mrules := make(map[string]MappingRule)
+	qnameRules := make(map[string]*MappingRule)
 	for _, rule := range cfg.Rules {
-		mrules[rule.Table.QualifiedName()] = rule
+		qnameRules[rule.Table.QualifiedName()] = &rule
 	}
 
 	return &Mapper{
-		mrules,
-		make(map[uint32]*pglogrepl.RelationMessage),
+		qnameRules,
+		make(map[uint32]*MappingRule),
 	}
 }
 
@@ -49,48 +50,78 @@ func getQualifiedName(msg *pglogrepl.RelationMessage) string {
 func (m *Mapper) CacheRelation(msg *pglogrepl.RelationMessage) {
 
 	// добавляем данные об отслеживаемом отображении только если есть соответствующее правило
-	relName := getQualifiedName(msg)
-	if _, ok := m.rules[relName]; ok {
-		m.relData[msg.RelationID] = msg
+	qName := getQualifiedName(msg)
+	if rule, ok := m.qnameRules[qName]; ok {
+		m.relIDRules[msg.RelationID] = rule
+		for fname, _ := range rule.Compiler.Fields {
+			cde := ColumnDataExtracter{}
+			for i, col := range msg.Columns {
+				if col.Name == fname {
+					cde.Idx = i
+					cde.DataType = col.DataType
+					break
+				}
+			}
+			rule.Compiler.Fields[fname] = cde
+		}
 	}
 }
 
 // получить все измененные ключи, связанные с данным отображением
-func (m *Mapper) GetKeys(relID uint32, tuple *pglogrepl.TupleData) []string {
+func (m *Mapper) GetKeys(relID uint32, tuple *pglogrepl.TupleData) ([]string, error) {
 
 	// проверяем отслеживаем ли мы данную таблицу
-	relMsg, ok := m.relData[relID]
+	rule, ok := m.relIDRules[relID]
 	if !ok {
-		return nil
+		return nil, nil
 	}
+	key, err := rule.Compiler.Compile(tuple)
+	if err != nil {
+		return nil, fmt.Errorf("compile key from tuple: %w", err)
+	}
+	return []string{key}, nil
+}
 
-	relName := relMsg.Namespace + "." + relMsg.RelationName
-	rule := m.rules[relName]
+type ColumnDataExtracter struct {
+	Idx      int    // индекс поля в RelationMessage
+	DataType uint32 // тип поля
+}
 
-	// TODO: явно нужно парсить KeyPattern в какую-то структуру и тут уже использовать всё готовое
-	colNames, _ := extractColumnNames(rule.KeyPattern)
+func (c ColumnDataExtracter) Extract(tuple *pglogrepl.TupleData) (string, error) {
+	return TupleDataToString(tuple.Columns[c.Idx], c.DataType)
+}
 
-	key := rule.KeyPattern
-	for _, name := range colNames {
-		// TODO: индекс поля и тип следует сразу где-то считать, а не вычислять каждый раз
-		var colIdx int
-		var colType uint32
-		for i, col := range relMsg.Columns {
-			if col.Name == name {
-				colIdx = i
-				colType = col.DataType
-			}
+type KeyCompiler struct {
+	Template *template.Template             // шаблон для вставки
+	Fields   map[string]ColumnDataExtracter // имя поля таблицы -> данные о поле
+}
+
+func (k *KeyCompiler) Compile(tuple *pglogrepl.TupleData) (string, error) {
+	dataMap := make(map[string]string)
+	for f, e := range k.Fields {
+		data, err := e.Extract(tuple)
+		if err != nil {
+			return "", fmt.Errorf("extract data from tuple: %w", err)
 		}
-
-		// TODO: нужно обрабатывать ошибку, если например в поле NULL
-		inkey, _ := TupleDataToString(tuple.Columns[colIdx], colType)
-
-		// TODO: это тоже явно нужно переделать
-		key = strings.ReplaceAll(rule.KeyPattern, "{"+name+"}", inkey)
+		dataMap[f] = data
 	}
 
-	// TODO: пока что возвращаю 1 ключ, в дальнейшем нужно будет реализовать составной ключ
-	return []string{key}
+	var keyBuilder strings.Builder
+	if err := k.Template.Execute(&keyBuilder, dataMap); err != nil {
+		return "", fmt.Errorf("execute key template: %w", err)
+	}
+
+	return keyBuilder.String(), nil
+}
+
+func tmplFromKeyPattern(pattern string) *template.Template {
+	// TODO: добавить проверку на равное число { и }
+	strTmpl := strings.NewReplacer(
+		"{", "{{.",
+		"}", "}}",
+	).Replace(pattern)
+
+	return template.Must(template.New("").Parse(strTmpl))
 }
 
 // привести значение из поля в строку

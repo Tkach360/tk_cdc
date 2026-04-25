@@ -351,7 +351,10 @@ func (r *Replicator) handleRowChange(ctx context.Context, relID uint32, tuple *p
 		return false, nil
 	}
 
-	keys := r.mapper.GetKeys(relID, tuple)
+	keys, err := r.mapper.GetKeys(relID, tuple)
+	if err != nil {
+		return false, err
+	}
 	if len(keys) == 0 {
 		return false, nil
 	}

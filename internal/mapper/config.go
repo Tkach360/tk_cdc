@@ -50,9 +50,26 @@ func (mc *MappingConfig) UnmarshalYAML(value *yaml.Node) error {
 			table.Schema = mc.DefaultSchema
 		}
 
+		names, err := extractColumnNames(ruleRaw.KeyPattern)
+		if err != nil {
+			return fmt.Errorf("extract column names: %w", err)
+		}
+		if len(names) == 0 {
+			return fmt.Errorf("the number of fields in key_pattern cannot be equal to 0")
+		}
+
+		fields := make(map[string]ColumnDataExtracter, len(names))
+		for _, name := range names {
+			fields[name] = ColumnDataExtracter{} // будет добавляться при кешировании данных таблицы
+		}
+
 		mc.Rules[i] = MappingRule{
 			Table:      table,
 			KeyPattern: ruleRaw.KeyPattern,
+			Compiler: KeyCompiler{
+				Template: tmplFromKeyPattern(ruleRaw.KeyPattern),
+				Fields:   fields,
+			},
 		}
 	}
 

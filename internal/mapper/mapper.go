@@ -68,23 +68,26 @@ func (m *Mapper) GetKeys(relID uint32, tuple *pglogrepl.TupleData) []string {
 	rule := m.rules[relName]
 
 	// TODO: явно нужно парсить KeyPattern в какую-то структуру и тут уже использовать всё готовое
-	colName, _ := extractColumnName(rule.KeyPattern)
+	colNames, _ := extractColumnNames(rule.KeyPattern)
 
-	// TODO: индекс поля и тип следует сразу где-то считать, а не вычислять каждый раз
-	var colIdx int
-	var colType uint32
-	for i, col := range relMsg.Columns {
-		if col.Name == colName {
-			colIdx = i
-			colType = col.DataType
+	key := rule.KeyPattern
+	for _, name := range colNames {
+		// TODO: индекс поля и тип следует сразу где-то считать, а не вычислять каждый раз
+		var colIdx int
+		var colType uint32
+		for i, col := range relMsg.Columns {
+			if col.Name == name {
+				colIdx = i
+				colType = col.DataType
+			}
 		}
+
+		// TODO: нужно обрабатывать ошибку, если например в поле NULL
+		inkey, _ := TupleDataToString(tuple.Columns[colIdx], colType)
+
+		// TODO: это тоже явно нужно переделать
+		key = strings.ReplaceAll(rule.KeyPattern, "{"+name+"}", inkey)
 	}
-
-	// TODO: нужно обрабатывать ошибку, если например в поле NULL
-	inkey, _ := TupleDataToString(tuple.Columns[colIdx], colType)
-
-	// TODO: это тоже явно нужно переделать
-	key := strings.ReplaceAll(rule.KeyPattern, "{"+colName+"}", inkey)
 
 	// TODO: пока что возвращаю 1 ключ, в дальнейшем нужно будет реализовать составной ключ
 	return []string{key}

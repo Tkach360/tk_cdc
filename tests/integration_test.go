@@ -645,6 +645,58 @@ func TestCDC_CacheInvalidation(t *testing.T) {
 				checkExistsKeys(t, rdConn, []string{"user:6"}, 2*time.Second)
 			},
 		},
+		{
+			name: "many updates, many without an update",
+			emulateWorkFunc: func(ctx context.Context, t *testing.T, pgConn *pgx.Conn, rdConn *redis.Client) {
+				// создание тестовой таблицы
+				_, err := pgConn.Exec(ctx, `
+				CREATE TABLE IF NOT EXISTS users (
+					id SERIAL PRIMARY KEY,
+					name TEXT NOT NULL,
+					email TEXT NOT NULL
+				);
+			`)
+				if err != nil {
+					t.Fatalf("create table: %v", err)
+				}
+
+				_, err = pgConn.Exec(ctx, `
+    INSERT INTO users (name, email) VALUES
+    ('Alice', 'alice@test.com'),
+    ('Joe', 'cooljoe@test.com'),
+    ('Bob', 'marley@test.com'),
+    ('Skinny Pete', 'skinnypete@test.com'),
+    ('Badger', 'badger@test.com'),
+    ('Hank Schrader', 'schrader@test.com')
+`)
+				if err != nil {
+					t.Errorf("insert user: %v", err)
+				}
+
+				// эмулируем кеш приложения
+				err = rdConn.MSet(ctx,
+					"user:1", `{"name":"Alice","email":"alice@test.com"}`,
+					"user:2", `{"name":"Joe","email":"cooljoe@test.com"}`,
+					"user:3", `{"name":"Bob","email":"marley@test.com"}`,
+					"user:4", `{"name":"Skinny Pete","email":"skinnypete@test.com"}`,
+					"user:5", `{"name":"Badger","email":"badger@test.com"}`,
+					"user:6", `{"name":"Hank Schrader","email":"schrader@test.com"}`,
+				).Err()
+				if err != nil {
+					t.Errorf("set redis key: %v", err)
+				}
+
+				// изменяем данные в БД
+				_, err = pgConn.Exec(ctx, "UPDATE users SET email='updated@test.com' WHERE id%2=0")
+				if err != nil {
+					t.Errorf("update user: %v", err)
+				}
+			},
+			checkFunc: func(ctx context.Context, t *testing.T, rdConn *redis.Client) {
+				checkNoExistsKeys(t, rdConn, []string{"user:2", "user:4", "user:6"}, 2*time.Second)
+				checkExistsKeys(t, rdConn, []string{"user:1", "user:3", "user:5"}, 2*time.Second)
+			},
+		},
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)

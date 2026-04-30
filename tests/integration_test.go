@@ -48,6 +48,26 @@ type ContainersConfig struct {
 	clearFunc func(ctx context.Context, pgConn *pgx.Conn, rdConn *redis.Client) error
 }
 
+func (c *ContainersConfig) WithOptions(opts ...ContainersConfigOption) {
+	for _, opt := range opts {
+		opt(c)
+	}
+}
+
+type ContainersConfigOption func(*ContainersConfig)
+
+func WithConfigYML(cfg string) ContainersConfigOption {
+	return func(c *ContainersConfig) {
+		c.configYML = cfg
+	}
+}
+
+func WithClearFunc(clearFunc func(ctx context.Context, pgConn *pgx.Conn, rdConn *redis.Client) error) ContainersConfigOption {
+	return func(c *ContainersConfig) {
+		c.clearFunc = clearFunc
+	}
+}
+
 func NewContainersConfig(ctx context.Context) (*ContainersConfig, error) {
 	cc := ContainersConfig{}
 	insertDefaultFields(&cc)
@@ -58,7 +78,6 @@ func NewContainersConfig(ctx context.Context) (*ContainersConfig, error) {
 	return &cc, nil
 }
 
-// TODO: переделать на Options
 func insertDefaultFields(s *ContainersConfig) {
 	if s.pgImage == "" {
 		s.pgImage = "postgres:16-alpine"
@@ -424,9 +443,11 @@ func checkExistsKeys(t *testing.T, rdb *redis.Client, keys []string, timeout tim
 func TestCDC_CacheInvalidation(t *testing.T) {
 
 	tests := []struct {
-		name            string
-		emulateWorkFunc func(ctx context.Context, t *testing.T, pgConn *pgx.Conn, rdConn *redis.Client)
-		checkFunc       func(ctx context.Context, t *testing.T, rdConn *redis.Client)
+		name              string
+		emulateWorkFunc   func(ctx context.Context, t *testing.T, pgConn *pgx.Conn, rdConn *redis.Client)
+		checkFunc         func(ctx context.Context, t *testing.T, rdConn *redis.Client)
+		wantNewContainers bool
+		opts              []ContainersConfigOption
 	}{
 		{
 			name: "updating one record in a tracked table",
@@ -697,6 +718,85 @@ func TestCDC_CacheInvalidation(t *testing.T) {
 				checkExistsKeys(t, rdConn, []string{"user:1", "user:3", "user:5"}, 2*time.Second)
 			},
 		},
+		{
+			name:              "many updates, many without an update",
+			wantNewContainers: true,
+			opts: []ContainersConfigOption{WithConfigYML(`
+postgres:
+  addr: "localhost:5432"
+  reconnect_max_attempts: 3
+  reconnect_delay_ms: 5000
+  db: "default_test_db"
+  replication_user: "default_replication"
+  replication_pass: "default_replication_pass"
+  app_user: "default_app_user"
+  app_pass: "default_app_pass"
+  replication_slot: "default_rep_slot"
+  plugin: "pgoutput"
+  publication_names: "default_publNames"
+redis:
+  addr: "localhost:6379"
+  user: "default_redis_user"
+  password: "default_redis_pass"
+  db: 0
+  query_max_attempts: 3
+  query_delay_ms: 10
+mapping:
+  default_schema: "public"
+  rules:
+   - table: "users"
+     key_pattern: "user:{id}:{name}"
+`)},
+			emulateWorkFunc: func(ctx context.Context, t *testing.T, pgConn *pgx.Conn, rdConn *redis.Client) {
+				// создание тестовой таблицы
+				_, err := pgConn.Exec(ctx, `
+				CREATE TABLE IF NOT EXISTS users (
+					id SERIAL PRIMARY KEY,
+					name TEXT NOT NULL,
+					email TEXT NOT NULL
+				);
+			`)
+				if err != nil {
+					t.Fatalf("create table: %v", err)
+				}
+
+				_, err = pgConn.Exec(ctx, `
+    INSERT INTO users (name, email) VALUES
+    ('Alice', 'alice@test.com'),
+    ('Joe', 'cooljoe@test.com'),
+    ('Bob', 'marley@test.com'),
+    ('Pete', 'skinnypete@test.com'),
+    ('Badger', 'badger@test.com'),
+    ('Hank', 'schrader@test.com')
+`)
+				if err != nil {
+					t.Errorf("insert user: %v", err)
+				}
+
+				// эмулируем кеш приложения
+				err = rdConn.MSet(ctx,
+					"user:1:Alice", `{"name":"Alice","email":"alice@test.com"}`,
+					"user:2:Joe", `{"name":"Joe","email":"cooljoe@test.com"}`,
+					"user:3:Bob", `{"name":"Bob","email":"marley@test.com"}`,
+					"user:4:Pete", `{"name":"Pete","email":"skinnypete@test.com"}`,
+					"user:5:Badger", `{"name":"Badger","email":"badger@test.com"}`,
+					"user:6:Hank", `{"name":"Hank","email":"schrader@test.com"}`,
+				).Err()
+				if err != nil {
+					t.Errorf("set redis key: %v", err)
+				}
+
+				// изменяем данные в БД
+				_, err = pgConn.Exec(ctx, "UPDATE users SET email='updated@test.com' WHERE id%2=0")
+				if err != nil {
+					t.Errorf("update user: %v", err)
+				}
+			},
+			checkFunc: func(ctx context.Context, t *testing.T, rdConn *redis.Client) {
+				checkNoExistsKeys(t, rdConn, []string{"user:2", "user:4", "user:6"}, 2*time.Second)
+				checkExistsKeys(t, rdConn, []string{"user:1", "user:3", "user:5"}, 2*time.Second)
+			},
+		},
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -720,8 +820,19 @@ func TestCDC_CacheInvalidation(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			initializer.TestFunc(ctx, t, tt.emulateWorkFunc, tt.checkFunc)
-		})
+		if tt.wantNewContainers {
+			newInitializer, err := NewContainersConfig(ctx)
+			if err != nil {
+				t.Fatalf("Containers config: %v", err)
+			}
+			newInitializer.WithOptions(tt.opts...)
+			t.Run(tt.name, func(t *testing.T) {
+				newInitializer.TestFunc(ctx, t, tt.emulateWorkFunc, tt.checkFunc)
+			})
+		} else {
+			t.Run(tt.name, func(t *testing.T) {
+				initializer.TestFunc(ctx, t, tt.emulateWorkFunc, tt.checkFunc)
+			})
+		}
 	}
 }

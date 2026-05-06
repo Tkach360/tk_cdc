@@ -222,10 +222,7 @@ func (s *ContainersConfig) createPostgresContainer(ctx context.Context) (testcon
 func (s *ContainersConfig) createRedisContainer(ctx context.Context) (testcontainers.Container, error) {
 
 	configContent := fmt.Sprintf(`
-# Отключаем default пользователя (опционально)
 user default off
-
-# Создаем кастомного пользователя
 user %s on >%s ~* &* +@all
 `, s.rdUser, s.rdPass)
 

@@ -1,22 +1,50 @@
-# docker-compose.yml
+version: "3.8"
+
 services:
   postgres:
-    image: postgres:16
+    image: postgres:16-alpine
     environment:
-      POSTGRES_USER: app
-      POSTGRES_PASSWORD: secret
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
       POSTGRES_DB: demo
     command: >
       postgres
       -c wal_level=logical
       -c max_replication_slots=4
       -c max_wal_senders=4
-    ports: ["5432:5432"]
-    volumes: ["pgdata:/var/lib/postgresql/data"]
+      -c max_wal_size=1GB
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d demo"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - ./demo/postgres_init:/docker-entrypoint-initdb.d:ro
 
   redis:
     image: redis:7-alpine
-    ports: ["6379:6379"]
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  tk_cdc:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["/app/service", "-config", "/app/config.yml"]
+    volumes:
+      - ./configs/demo_config.yml:/app/config.yml:ro
+    environment:
+      - TZ=UTC
 
 volumes:
-  pgdata:
+  pg_data:

@@ -1,32 +1,29 @@
 postgres:
-  addr: "${POSTGRES_ADDR:-localhost:5432}"
-  db: "${POSTGRES_DB:-demo}"
+  addr: postgres
+  db: demo
   reconnect_max_attempts: 3
   reconnect_delay_ms: 5000
 
   # пользователь для чтения репликации
-  replication_user: "${TKCDC_REPLICATION_USER:-tkcdc_replication_user}"
-  replication_pass: "${TKCDC_REPLICATION_PASS:-tkcdc_replication_pass}"
+  replication_user: demo_replication_user
+  replication_pass: demo_replication_pass
 
   # отдельный полльзователь для выполнения операций проверки наличия слота и получения LSN
-  app_user: "${TKCDC_USER:-tkcdc_user}"
-  app_pass: "${TKCDC_PASS:-tkcdc_pass}"
+  app_user: demo_user
+  app_pass: demo_pass
 
   # имя слота логической репликации
   # если слот не существует - сервис попытается создать его при старте
-  replication_slot: "${PG_SLOT:-redis_invalidator}"
+  replication_slot: tkcdc_slot
 
   # плагин декодирования сообщений WAL, важно для формата сообщений
-  plugin: "pgoutput"
+  plugin: pgoutput
 
   # имя публикаций, которые отслеживаем через запятую
-  publication_names: "${PUBLICATION_NAMES:-test_pub}"
+  publication_names: demo_pub
 
 redis:
-  addr: "{REDIS_ADDR:-localhost:6379}"
-
-  user: "${REDIS_USER:-}"
-  password: "${REDIS_PASSWORD:-}"
+  addr: redis:6379
 
   # номер логической базы данных в Redis
   db: 0
@@ -36,13 +33,13 @@ redis:
   query_delay_ms: 10
 
 mapping:
-  default_schema: "public"
+  default_schema: public
   rules:
-    - table: "users" # имя таблицы postgres, чьи поля нужно отслеживать
+    - table: users # имя таблицы postgres, чьи поля нужно отслеживать
       # таблица должна иметь PK или иметь UNIQUE NOT NULL поле с настроенным REPLICA IDENTITY USING INDEX
       # для однозначной идентификации записи
 
       # шаблон ключа в redis, который будет удаляться при изменении строки в postgres
       # в фигурных скобках указано имя поля в postgres (обычно PK), значение которого будет подставляться
       # ! ключи в redis плоские, удаление "user:123" НЕ удалит "user:123:email"
-      key_pattern: "user:{id}"
+      key_pattern: user:{id}

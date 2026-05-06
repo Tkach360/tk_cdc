@@ -35,11 +35,20 @@ func New(cfg *config.RedisConfig, logger *slog.Logger) (*Invalidator, error) {
 		// TODO: нужно добавить таймаутов
 	})
 
-	if err := redis.Ping(context.Background()).Err(); err != nil {
-		return nil, fmt.Errorf("redis ping failed: %w", err)
+	inv := &Invalidator{redis, logger, cfg.QMaxAttempts, cfg.QDelay}
+
+	if err := inv.CheckRedis(context.Background()); err != nil {
+		return nil, err
 	}
 
-	return &Invalidator{redis, logger, cfg.QMaxAttempts, cfg.QDelay}, nil
+	return inv, nil
+}
+
+func (i *Invalidator) CheckRedis(ctx context.Context) error {
+	if err := i.redis.Ping(ctx).Err(); err != nil {
+		return fmt.Errorf("redis ping failed: %w", err)
+	}
+	return nil
 }
 
 // инвалидировать ключи

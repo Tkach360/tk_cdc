@@ -62,6 +62,13 @@ func New(cfg *config.Config, logger *slog.Logger) (*Replicator, error) {
 	}, nil
 }
 
+func (r *Replicator) CheckPostgres(ctx context.Context) error {
+	if err := r.conn.Ping(ctx); err != nil {
+		return fmt.Errorf("ping postgres: %w", err)
+	}
+	return nil
+}
+
 func (r *Replicator) connect(ctx context.Context) error {
 	r.logger.Info("connecting to postgres", "dsn", r.cfg.Postgres.ReplicationDSN())
 

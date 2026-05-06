@@ -31,6 +31,14 @@ func New(cfg *config.Config, logger *slog.Logger) (*Service, error) {
 	return &Service{cfg, replicator, invalidator, logger}, nil
 }
 
+func (s *Service) CheckRedis(ctx context.Context) error {
+	return s.invalidator.CheckRedis(ctx)
+}
+
+func (s *Service) CheckPostgres(ctx context.Context) error {
+	return s.replicator.CheckPostgres(ctx)
+}
+
 // запуск сервиса
 func (s *Service) Run(ctx context.Context) error {
 

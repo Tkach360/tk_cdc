@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -10,6 +11,10 @@ import (
 
 	"github.com/Tkach360/tk_cdc/internal/config"
 	"github.com/Tkach360/tk_cdc/internal/service"
+)
+
+var (
+	ConfigPath = flag.String("config", "./tk_cdc_config.yml", "Service configuration, contains PostgreSQL and Redis settings")
 )
 
 func main() {
@@ -20,8 +25,10 @@ func main() {
 	)
 	defer cancel()
 
+	flag.Parse()
+
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	cfg, err := config.Load("configs/config.yml")
+	cfg, err := config.Load(*ConfigPath)
 	if err != nil {
 		logger.Error("failed to load config", "error", err)
 		os.Exit(1)

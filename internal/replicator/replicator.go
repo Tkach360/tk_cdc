@@ -76,6 +76,7 @@ func (r *Replicator) connect(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("connection postgres: %w", err)
 	}
+	r.conn = conn
 
 	if err := r.ensureReplicationSlot(ctx); err != nil {
 		return fmt.Errorf("ensure replication slot: %w", err)
@@ -88,13 +89,13 @@ func (r *Replicator) connect(ctx context.Context) error {
 	}
 	r.logger.Info("starting replication", "r.logger", r.slotName, "start_lsn", startLSN.String())
 
-	cfg := conn.Config()
+	cfg := r.conn.Config()
 	r.logger.Debug("connection check",
 		"replication_param", cfg.RuntimeParams["replication"],
 		"host", cfg.Host,
 		"database", cfg.Database,
 	)
-	sysident, err := pglogrepl.IdentifySystem(ctx, conn.PgConn())
+	sysident, err := pglogrepl.IdentifySystem(ctx, r.conn.PgConn())
 	if err != nil {
 		return fmt.Errorf("ifentify system: %w", err)
 	}
@@ -102,7 +103,7 @@ func (r *Replicator) connect(ctx context.Context) error {
 	// зпауск потока репликации
 	err = pglogrepl.StartReplication(
 		ctx,
-		conn.PgConn(),
+		r.conn.PgConn(),
 		r.slotName,
 		startLSN,
 		pglogrepl.StartReplicationOptions{PluginArgs: []string{
@@ -113,7 +114,6 @@ func (r *Replicator) connect(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("start replication %w", err)
 	}
-	r.conn = conn
 	r.logger.Info("replication stream started", "systemid", sysident.SystemID)
 	return nil
 }
@@ -222,14 +222,14 @@ func (r *Replicator) Run(ctx context.Context, keysCh chan<- []string) error {
 }
 
 // выполнить операцию с созданием нового, нерепликационного соединения с БД
-func (r *Replicator) withAdminConnection(ctx context.Context, fn func(context.Context, *pgx.Conn) error) error {
+func (r *Replicator) withAdminConnection(ctx context.Context, fn func(*pgx.Conn) error) error {
 	conn, err := pgx.ConnectConfig(ctx, r.appConfig)
 	if err != nil {
 		return fmt.Errorf("admin connect: %w", err)
 	}
 	defer conn.Close(ctx)
 
-	return fn(ctx, conn)
+	return fn(conn)
 }
 
 // проверить есть ли слот репликации, создать если нет
@@ -237,38 +237,38 @@ func (r *Replicator) ensureReplicationSlot(ctx context.Context) error {
 
 	// проверка наличия слота использует SQL, значит выполнить через репликационное соединение не выйдет
 	// и придется использовать другое соединение
-	return r.withAdminConnection(ctx, func(ctx context.Context, conn *pgx.Conn) error {
-		var exists bool
-		err := conn.QueryRow(
+	var exists bool
+	err := r.withAdminConnection(ctx, func(conn *pgx.Conn) error {
+		return conn.QueryRow(
 			ctx,
 			"SELECT EXISTS(SELECT 1 FROM pg_replication_slots WHERE slot_name = $1)",
 			r.slotName,
 		).Scan(&exists)
-
-		if errors.Is(err, pgx.ErrNoRows) {
-			// создание слота
-			r.logger.Info("creating replication slot", "slot", r.slotName, "plugin", r.plugin)
-			_, err = pglogrepl.CreateReplicationSlot(
-				ctx,
-				conn.PgConn(),
-				r.slotName,
-				r.plugin,
-				pglogrepl.CreateReplicationSlotOptions{Temporary: false},
-			)
-			if err != nil {
-				return fmt.Errorf("create slot: %w", err)
-			}
-			r.logger.Info("replication slot created")
-			return nil
-		}
-
-		if err != nil {
-			return fmt.Errorf("check slot existence: %w", err)
-		}
-
-		r.logger.Info("replication slot exists", "slot", r.slotName)
-		return nil
 	})
+
+	if !exists {
+		// создание слота
+		r.logger.Info("creating replication slot", "slot", r.slotName, "plugin", r.plugin)
+		_, err := pglogrepl.CreateReplicationSlot(
+			ctx,
+			r.conn.PgConn(),
+			r.slotName,
+			r.plugin,
+			pglogrepl.CreateReplicationSlotOptions{Temporary: false},
+		)
+		if err != nil {
+			return fmt.Errorf("create slot: %w", err)
+		}
+		r.logger.Info("replication slot created")
+		return nil
+	}
+
+	if err != nil {
+		return fmt.Errorf("check slot existence: %w", err)
+	}
+
+	r.logger.Info("replication slot exists", "slot", r.slotName)
+	return nil
 }
 
 // получить позицию LSN с которой следует продолжить чтение
@@ -276,7 +276,7 @@ func (r *Replicator) getRestartLSN(ctx context.Context) (pglogrepl.LSN, error) {
 
 	// получение позиции LSN требует SQL запроса, следовательно нужно использовать отдельное, нерепликационное соединение
 	var lsn pglogrepl.LSN
-	err := r.withAdminConnection(ctx, func(ctx context.Context, conn *pgx.Conn) error {
+	err := r.withAdminConnection(ctx, func(conn *pgx.Conn) error {
 		// TODO: по-хорошему нужно читать LSN откуда-то, а не использовать начало слота
 		var lsnStr string
 		err := conn.QueryRow(
